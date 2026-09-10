@@ -64,6 +64,9 @@ A change with no visible surface gets nothing, and the tool says so.
 retried, instead of dropping you at an error. Off unless asked for; it edits
 files. Details below.
 
+**`--pr-list`**. Open PRs in every repo of the stack, `number  title`, one
+block per repo, so you can pick what to run.
+
 Also: `--open /path` when the inferred screen is wrong, `--services a,b` when
 the inferred set is wrong, `--no-open`, `--model`, `--attempts`.
 

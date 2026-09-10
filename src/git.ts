@@ -107,3 +107,18 @@ export function formatAutosolveSummary(byRepo: Record<string, Change[]>): string
     `full record: git log <pr-head>..HEAD in each worktree under ${worktreeRoot()}`
   ].join('\n');
 }
+
+export type Pr = { number: number; title: string };
+
+export function openPrs(repoDir: string): Pr[] {
+  const r = spawnSync('gh', ['pr', 'list', '--state', 'open', '--limit', '100', '--json', 'number,title'], { cwd: repoDir, encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`gh pr list failed in ${repoDir}: ${r.stderr.trim()}`);
+  return JSON.parse(r.stdout);
+}
+
+export function formatPrList(byRepo: Record<string, Pr[]>): string {
+  const width = Math.max(1, ...Object.values(byRepo).flat().map((p) => String(p.number).length));
+  return Object.entries(byRepo)
+    .flatMap(([repo, prs]) => [repo, ...(prs.length ? prs.map((p) => `${String(p.number).padStart(width)}  ${p.title}`) : ['  (no open PRs)'])])
+    .join('\n');
+}

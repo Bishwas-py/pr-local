@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAutosolveLog, formatAutosolveSummary } from '../src/git.ts';
+import { parseAutosolveLog, formatAutosolveSummary, formatPrList } from '../src/git.ts';
 
 const raw = '\x1efix: a migration conflicted with the base branch\n\ndb/migrations/1.sql\ndb/migrations/atlas.sum\n\x1elocal: FOO_API_KEY was unset, stubbed the client\n\napp/foo.go\n';
 
@@ -23,4 +23,11 @@ test('summary says how many, and which pile each belongs to', () => {
 
 test('no changes reads as nothing touched', () => {
   assert.match(formatAutosolveSummary({}), /autosolve made no changes/);
+});
+
+test('pr list prints number and title, grouped by repo', () => {
+
+  const s = formatPrList({ api: [{ number: 305, title: 'feat: snapshot' }], web: [{ number: 311, title: 'feat: quiet log' }, { number: 3, title: 'x' }] });
+  assert.equal(s, 'api\n305  feat: snapshot\nweb\n311  feat: quiet log\n  3  x');
+  assert.equal(formatPrList({ api: [] }), 'api\n  (no open PRs)');
 });

@@ -5,7 +5,7 @@ import { loadConfig, type Config } from './config.ts';
 import { requiredServices, routeFor, parseTarget, type Service, type Target } from './plan.ts';
 import { prBranch, remoteBranches, prepareWorktree, changedFiles, diffText, autosolveChanges, formatAutosolveSummary, type Checkout, type Change } from './git.ts';
 import { SecretStore, readEnvFiles, isSecretName, promptSecret, unsetVars, type Secrets } from './secrets.ts';
-import { git } from './git.ts';
+import { git, openPrs, formatPrList } from './git.ts';
 import { start, runOnce, waitReady, stop, tail, type Running } from './proc.ts';
 import { runAgent, autosolvePrompt, seedPrompt, type Failure } from './agent.ts';
 
@@ -15,6 +15,7 @@ const USAGE = `usage: deploy-dev [<pr|ticket|branch> ...] [options]
   deploy-dev --addpr 12 13           run PRs 12 and 13 merged together
   deploy-dev CLA-601                 a ticket id, when the config says what one looks like
   deploy-dev user/some-branch        a branch name
+  deploy-dev --pr-list               open PRs in every repo of the stack
 
 options
   --fillindata        seed only the data this diff needs to be seen (uses an agent)
@@ -52,6 +53,7 @@ function main() {
       config: { type: 'string' },
       model: { type: 'string' },
       'no-open': { type: 'boolean' },
+      'pr-list': { type: 'boolean' },
       attempts: { type: 'string', default: '3' },
       help: { type: 'boolean', short: 'h' }
     }
@@ -61,6 +63,10 @@ function main() {
     return;
   }
   const cfg = loadConfig(values.config);
+  if (values['pr-list']) {
+    process.stdout.write(formatPrList(Object.fromEntries(Object.entries(cfg.repos).map(([n, d]) => [n, openPrs(d)]))) + '\n');
+    return;
+  }
   const targets: Target[] = [];
   if (values.pr) targets.push({ pr: Number(values.pr) });
   if (values.branch) targets.push({ branch: values.branch });
