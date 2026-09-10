@@ -97,3 +97,12 @@ export function parseTarget(arg: string, ticketPattern: string | undefined): Tar
   }
   return { branch: arg };
 }
+
+/** One branch from what a PR number or ticket resolved to per repo. When the
+ *  candidates differ, the repo the user is standing in decides. */
+export function pickBranch(found: Map<string, string[]>, currentRepo: string | undefined): { branch: string } | { ambiguous: string[] } | { none: true } {
+  if (found.size === 0) return { none: true };
+  if (found.size === 1) return { branch: [...found.keys()][0] };
+  for (const [branch, repos] of found) if (currentRepo && repos.includes(currentRepo)) return { branch };
+  return { ambiguous: [...found].map(([b, r]) => `${b} (${r.join(', ')})`) };
+}

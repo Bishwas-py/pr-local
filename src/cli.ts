@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { loadConfig, type Config } from './config.ts';
-import { requiredServices, routeFor, parseTarget, type Service, type Target } from './plan.ts';
+import { requiredServices, routeFor, parseTarget, pickBranch, type Service, type Target } from './plan.ts';
 import { prBranch, remoteBranches, prepareWorktree, changedFiles, diffText, autosolveChanges, formatAutosolveSummary, type Checkout, type Change } from './git.ts';
 import { SecretStore, readEnvFiles, isSecretName, promptSecret, unsetVars, type Secrets } from './secrets.ts';
 import { git, openPrs, formatPrList } from './git.ts';
@@ -94,14 +94,26 @@ function branchFor(cfg: Config, t: Target): string {
     for (const b of hits) found.set(b, [...(found.get(b) ?? []), name]);
   }
   const label = 'pr' in t ? `PR #${t.pr}` : `ticket ${t.ticket}`;
-  if (found.size === 0) die(`${label} is not in any repo of ${cfg.file}`);
-  if (found.size > 1) die(`${label} names different branches: ${[...found].map(([b, r]) => `${b} (${r.join(', ')})`).join('; ')}. Pass the branch instead.`);
-  return [...found.keys()][0];
+  const pick = pickBranch(found, currentRepo(cfg));
+  if ('branch' in pick) return pick.branch;
+  if ('none' in pick) return die(`${label} is not in any repo of ${cfg.file}`);
+  return die(`${label} names different branches: ${pick.ambiguous.join('; ')}. Run from inside one of those repos, or pass the branch.`);
+}
+
+/** The config repo the current directory is inside, if any. */
+function currentRepo(cfg: Config): string | undefined {
+  const cwd = process.cwd();
+  return Object.entries(cfg.repos).find(([, dir]) => cwd === dir || cwd.startsWith(dir + path.sep))?.[0];
 }
 
 async function run(cfg: Config, targets: Target[], opts: Opts) {
   const branches = targets.map((t) => branchFor(cfg, t));
   if (branches.length) say(`branch${branches.length > 1 ? 'es' : ''}: ${branches.join(' + ')}`);
+  for (const b of branches) {
+    if (!Object.values(cfg.repos).some((dir) => remoteBranches(dir, b).length > 0)) {
+      die(`branch ${b} no longer exists on any remote; the PR was probably merged or closed. Try deploy-dev --pr-list for what is open.`);
+    }
+  }
 
   const store = new SecretStore();
   const checkouts: Record<string, Checkout> = {};

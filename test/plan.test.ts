@@ -60,3 +60,18 @@ test('parseTarget tells a pr number, a ticket and a branch apart', () => {
   assert.deepEqual(parseTarget('user/cla-601-steps', 'cla-{id}'), { branch: 'user/cla-601-steps' });
   assert.deepEqual(parseTarget('CLA-601', undefined), { branch: 'CLA-601' });
 });
+
+import { pickBranch } from '../src/plan.ts';
+
+test('an ambiguous PR number is settled by the repo you are standing in', () => {
+  const found = new Map([['user/cla-580', ['api']], ['user/cla-581', ['web']]]);
+  assert.deepEqual(pickBranch(found, 'web'), { branch: 'user/cla-581' });
+  assert.deepEqual(pickBranch(found, 'api'), { branch: 'user/cla-580' });
+  assert.deepEqual(pickBranch(found, undefined), { ambiguous: ['user/cla-580 (api)', 'user/cla-581 (web)'] });
+  assert.deepEqual(pickBranch(found, 'other'), { ambiguous: ['user/cla-580 (api)', 'user/cla-581 (web)'] });
+});
+
+test('one branch across repos needs no tie break', () => {
+  assert.deepEqual(pickBranch(new Map([['user/x', ['api', 'web']]]), undefined), { branch: 'user/x' });
+  assert.deepEqual(pickBranch(new Map(), 'web'), { none: true });
+});
