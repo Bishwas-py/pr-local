@@ -3,9 +3,10 @@
 Run an unmerged PR on your own machine, in minutes, before the merge.
 
 ```
-deploy-dev --pr 12 --fillindata --autosolve
+deploy-dev --pr 12
 deploy-dev --addpr 12 13
 deploy-dev CLA-601
+deploy-dev --pr 12 --fillindata
 ```
 
 Checks the PR out, brings up the smallest running stack that makes it visible,
@@ -32,7 +33,7 @@ local Postgres):
 | Run | Time to a browser tab |
 | -- | -- |
 | First run of the day, worktrees exist | 31s |
-| With a migration ledger to repair (`--autosolve`) | about 3 min |
+| With a migration ledger to repair (autosolve) | about 3 min |
 | With `--fillindata` | stack in 34s, seed data 5 to 8 min later, browser opens first |
 
 Node 22.18 or newer, git, and `gh` (for PR numbers). No build step: the tool
@@ -60,9 +61,10 @@ needs failed rows, not healthy ones), writes an idempotent seed script into
 the worktree, runs it against the running stack, and commits it as `local:`.
 A change with no visible surface gets nothing, and the tool says so.
 
-**`--autosolve`**. When bring-up breaks, an agent fixes it and the step is
-retried, instead of dropping you at an error. Off unless asked for; it edits
-files. Details below.
+**Autosolve**, on by default. When bring-up breaks, an agent fixes it and the
+step is retried, instead of dropping you at an error. It edits only the
+scratch worktree and commits every change; `--no-autosolve` stops at the
+error instead. Details below.
 
 **`--pr-list`**. Open PRs in every repo of the stack, `number  title`, one
 block per repo, so you can pick what to run.

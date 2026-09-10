@@ -18,8 +18,8 @@ const USAGE = `usage: deploy-dev [<pr|ticket|branch> ...] [options]
   deploy-dev --pr-list               open PRs in every repo of the stack
 
 options
-  --fillindata        seed only the data this diff needs to be seen (uses an agent)
-  --autosolve         when bring-up breaks, let an agent fix it and retry (edits files, commits each fix)
+  --fillindata        seed only the data this diff needs to be seen (uses an agent, minutes and dollars)
+  --no-autosolve      when bring-up breaks, stop at the error instead of letting an agent fix it and retry
   --open <path>       open this path instead of the one inferred from the diff
   --services a,b      boot exactly these instead of inferring from the diff
   --config <file>     deploy-dev.yaml to use (default: nearest one upward from cwd)
@@ -47,7 +47,7 @@ function main() {
       addpr: { type: 'boolean' },
       branch: { type: 'string' },
       fillindata: { type: 'boolean' },
-      autosolve: { type: 'boolean' },
+      'no-autosolve': { type: 'boolean' },
       open: { type: 'string' },
       services: { type: 'string' },
       config: { type: 'string' },
@@ -73,7 +73,7 @@ function main() {
   for (const p of positionals) targets.push(parseTarget(p, cfg.ticket));
   return run(cfg, targets, {
     fillindata: !!values.fillindata,
-    autosolve: !!values.autosolve,
+    autosolve: !values['no-autosolve'],
     open: values.open,
     services: values.services?.split(',').map((s) => s.trim()).filter(Boolean),
     model: values.model,
@@ -177,7 +177,13 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
     const env = envs[name];
     const ctx = () => ({ cwd, env, secrets: secretsFor(name), extraEnv: pick(env, svc.agent_env) });
     if (svc.ready && (await waitReady(svc.ready, 2000)) === 'ready') {
-      if (svc.repo) die(`${name} already answers at ${svc.ready}; this PR is already running (or something else took its port). Stop it first.`);
+      if (svc.repo) {
+        const url = opts.open ?? openUrl(cfg, required, changed);
+        say(`${name} already answers at ${svc.ready}: this PR is already running${url ? `, screen: ${url}` : ''}`);
+        if (url && !opts.noOpen) spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { stdio: 'ignore', detached: true }).unref();
+        for (const r of running) stop(r);
+        process.exit(0);
+      }
       status[name] = `already running at ${svc.ready}`;
       say(`${name}: already running at ${svc.ready}`);
       continue;
@@ -271,7 +277,7 @@ async function withAutosolve<T>(where: Omit<Failure, 'message' | 'logTail'>, fn:
       }
       if (!opts.autosolve) {
         process.stderr.write(`\n${failure.service} failed at ${failure.step}: ${failure.message}\n${failure.logTail}\n`);
-        die(`re-run with --autosolve to let an agent fix it, or fix it by hand in ${ctx().cwd}`);
+        die(`autosolve is off; fix it by hand in ${ctx().cwd} or run again without --no-autosolve`);
       }
       if (attempt > opts.attempts) {
         process.stderr.write(`\n${failure.service} still fails at ${failure.step} after ${opts.attempts} autosolve attempts: ${failure.message}\n`);
