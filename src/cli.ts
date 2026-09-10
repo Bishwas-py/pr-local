@@ -32,6 +32,7 @@ options
   --config <file>     pr-local.yaml to use (default: nearest one that names this repo)
   --model <name>      agent model (default claude-opus-5)
   --no-agent          no model calls at all: stop at errors, seed nothing, watch nothing
+  --no-seed           keep autosolve and the watch, but do not fill in any data
   --no-open           do not open a browser
   --attempts <n>      fix attempts per failing step (default 3)
 `;
@@ -52,7 +53,7 @@ process.on('uncaughtException', (e) => die(`unexpected: ${e.message}`));
 process.on('unhandledRejection', (e: any) => die(`unexpected: ${e?.message ?? e}`));
 const openBrowser = (url: string) => spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { stdio: 'ignore', detached: true }).unref();
 
-type Opts = { open?: string; services?: string[]; model?: string; noOpen: boolean; noAgent: boolean; attempts: number };
+type Opts = { open?: string; services?: string[]; model?: string; noOpen: boolean; noAgent: boolean; noSeed: boolean; attempts: number };
 
 function main() {
   const { values, positionals } = parseArgs({
@@ -67,6 +68,7 @@ function main() {
       model: { type: 'string' },
       'no-open': { type: 'boolean' },
       'no-agent': { type: 'boolean' },
+      'no-seed': { type: 'boolean' },
       'pr-list': { type: 'boolean' },
       attempts: { type: 'string', default: '3' },
       help: { type: 'boolean', short: 'h' }
@@ -92,6 +94,7 @@ function main() {
     model: values.model,
     noOpen: !!values['no-open'],
     noAgent: !!values['no-agent'],
+    noSeed: !!values['no-seed'],
     attempts: Number(values.attempts)
   });
 }
@@ -294,7 +297,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
     const priorCommits = Object.entries(checkouts).flatMap(([n, co]) => autosolveChanges(co).map((c) => `  ${n}: ${c.kind}: ${c.message} (${c.files.join(', ') || 'no files'})`)).join('\n');
     say(`checking: what data the change needs, and whether the screen works`);
     try {
-      const r = await runAgent(checkPrompt({ diff, hints, running: services(), logTails, screen, priorCommits }, ctx), ctx, (l) => say(`  agent: ${l}`));
+      const r = await runAgent(checkPrompt({ diff, hints, running: services(), logTails, screen, priorCommits, seed: !opts.noSeed }, ctx), ctx, (l) => say(`  agent: ${l}`));
       say(`check ${r.ok ? 'done' : 'stopped early'}: ${r.turns} turns, $${r.costUsd.toFixed(2)}${r.ok ? '' : `, ${r.text.split('\n').at(-1)}`}`);
       await applyReport(parseReport(r.text));
     } catch (e: any) {
@@ -341,7 +344,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
   for (const name of required) process.stderr.write(`  ${name.padEnd(10)} ${status[name] ?? 'external'}\n`);
   if (screen) process.stderr.write(`  screen     ${screen}\n`);
   if (!opts.noAgent) {
-    process.stderr.write(`  data       ${data === 'filled' ? 'seeded for this change (reload the screen)' : 'nothing needed'}\n`);
+    process.stderr.write(`  data       ${opts.noSeed ? 'seeding off (--no-seed)' : data === 'filled' ? 'seeded for this change (reload the screen)' : 'nothing needed'}\n`);
     const fixed = found.filter((i) => i.fixed).length;
     process.stderr.write(`  issues     ${found.length ? `${found.length} found, ${fixed} fixed` : 'none found'}\n`);
     for (const i of found.filter((x) => !x.fixed)) process.stderr.write(`             not fixed: ${i.found}\n`);

@@ -56,7 +56,8 @@ asks for the branch instead.
 **`--addpr 12 13`**. Several PRs merged together locally. The first is the
 base, the rest are merged in; conflicts go to autosolve when it is on.
 
-**Seeding the data the PR needs** happens automatically, no flag. An agent reads
+**Seeding the data the PR needs** happens automatically, no flag; `--no-seed`
+turns just this off while keeping autosolve and the error watch. An agent reads
 the diff, decides what state a human must see (a page that surfaces failures
 needs failed rows, not healthy ones), writes an idempotent seed script into
 the worktree, runs it against the running stack, and commits it as `local:`.
@@ -70,7 +71,7 @@ error instead. Details below.
 **`--pr-list`**. Open PRs in every repo of the stack, `number  title`, one
 block per repo, so you can pick what to run.
 
-Also: `--open /path` when the inferred screen is wrong, `--services a,b` when
+Also: `--no-seed` to skip only the data fill, `--open /path` when the inferred screen is wrong, `--services a,b` when
 the inferred set is wrong, `--no-open`, `--model`, `--attempts`.
 
 ## Boot only what the PR needs

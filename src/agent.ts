@@ -174,17 +174,24 @@ export type CheckInput = {
   logTails: Record<string, string>;
   screen?: string;
   priorCommits: string;
+  seed: boolean;
 };
 
 /** One pass after boot: is data needed, and does the screen actually work. */
 export function checkPrompt(input: CheckInput, ctx: AgentContext): string {
+  const dataTask = input.seed
+    ? `1. DATA: what state must exist for this change to be visible? A page that surfaces failures needs failed rows, not healthy ones. If the change has no visible surface, nothing: report data "none". Otherwise write an idempotent, additive seed script into the working directory, run it, commit it as "local: seed <what and why>".`
+    : `Seeding is off for this run: do NOT create, seed or modify any data, and report data "none".`;
+  const budget = input.seed
+    ? `Budget: about 30 tool calls in total. Seed first and commit it as soon as it runs; then the runtime check. Do not mint or forge tokens and do not read authentication code: if an endpoint needs a token you do not have, curl it once, record the status in the report, and move on. Stay inside the working directories listed below; read nothing else on this machine.`
+    : `Budget: about 15 tool calls in total. Do not mint or forge tokens and do not read authentication code: if an endpoint needs a token you do not have, curl it once, record the status in the report, and move on. Stay inside the working directories listed below; read nothing else on this machine.`;
   const body = [
-    `pr-local has a PR running locally so a human can review it. Two questions, answer both by acting, quickly:`,
-    `1. DATA: what state must exist for this change to be visible? A page that surfaces failures needs failed rows, not healthy ones. If the change has no visible surface, nothing: report data "none". Otherwise write an idempotent, additive seed script into the working directory, run it, commit it as "local: seed <what and why>".`,
-    `2. RUNTIME: does the screen work against this local stack? Fetch the screen and the API calls it makes, read the service logs below for 4xx/5xx/errors, and exercise the endpoints the diff touches. A boot that answers its health check can still fail every real request (a 401 on an endpoint that needs a token subject, a missing local setting, a stale generated client).`,
+    `pr-local has a PR running locally so a human can review it. ${input.seed ? 'Two questions, answer both' : 'One question, answer it'} by acting, quickly:`,
+    dataTask,
+    `${input.seed ? '2. ' : ''}RUNTIME: does the screen work against this local stack? Fetch the screen and the API calls it makes, read the service logs below for 4xx/5xx/errors, and exercise the endpoints the diff touches. A boot that answers its health check can still fail every real request (a 401 on an endpoint that needs a token subject, a missing local setting, a stale generated client).`,
     `For every issue: fix it if it is this machine's problem (kind "local") or the PR's (kind "fix"), one commit each, prefixed "fix:" or "local:", the error in the subject. Do not improve anything else.`,
     ``,
-    `Budget: about 30 tool calls in total. Seed first and commit it as soon as it runs; then the runtime check. Do not mint or forge tokens and do not read authentication code: if an endpoint needs a token you do not have, curl it once, record the status in the report, and move on. Stay inside the working directories listed below; read nothing else on this machine.`,
+    budget,
     `Already on the scratch branch from earlier runs (reuse, never redo):`,
     input.priorCommits || '  (nothing yet)',
     ``,
@@ -192,8 +199,7 @@ export function checkPrompt(input: CheckInput, ctx: AgentContext): string {
     `Screen under review: ${input.screen ?? '(none inferred)'}`,
     `Running services (use them, never start your own):`,
     ...input.running.map((r) => `  ${r.service}: ${r.url}  log: ${r.log}${r.worktree ? `  code: ${r.worktree}` : ''}`),
-    `How to seed:`,
-    ...input.hints.map((h) => `  ${h.service}: ${h.hint}`),
+    ...(input.seed ? [`How to seed:`, ...input.hints.map((h) => `  ${h.service}: ${h.hint}`)] : []),
     `Environment variable names available to your shell: ${ctx.envNames.set.join(', ') || '(none)'}`,
     `Never read .env files or ~/.config/pr-local. Never write a secret value anywhere.`,
     ``,
