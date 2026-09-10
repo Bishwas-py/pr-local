@@ -139,7 +139,7 @@ function localEnv(dir: string | undefined): Record<string, string> {
 async function run(cfg: Config, targets: Target[], opts: Opts) {
   const stackId = createHash('sha1').update(cfg.file + '|' + Object.values(cfg.repos).join('|')).digest('hex').slice(0, 8);
   for (const [name, dir] of Object.entries(cfg.repos)) {
-    if (!fs.existsSync(dir) || !gitOk(dir, 'rev-parse', '--git-dir')) die(`repo "${name}" in ${cfg.file} points at ${dir}, which is not a git repository`);
+    if (!fs.existsSync(dir) || !gitOk(dir, 'rev-parse', '--git-dir')) die(`repo "${name}" in ${cfg.file} points at ${dir}, which is not a git repository. If ${cfg.file} is a stale auto-generated config, delete it and pr-local will detect your stack; otherwise fix its repos.`);
     if (!gitOk(dir, 'remote', 'get-url', 'origin')) die(`repo "${name}" at ${dir} has no "origin" remote; pr-local fetches PR branches from origin`);
   }
   const branches = targets.map((t) => branchFor(cfg, t));
