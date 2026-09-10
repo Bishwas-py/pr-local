@@ -90,8 +90,11 @@ back to the service `url`.
 ## Generic core, one config file
 
 The tool contains no project name, service name or repo path. Everything
-project-shaped is data in a `deploy-dev.yaml` in **your** repo (found upward
-from the current directory, or `--config`). Paths are relative to the file.
+project-shaped is data in a `deploy-dev.yaml` in **your** repo, or `--config`.
+It is found from any repo in the stack: first upward from the current
+directory, then one level sideways at each step up to `$HOME`, taking the
+config that names the current repo. Two configs naming the same repo is an
+error, not a guess. Paths are relative to the file.
 
 ```yaml
 default_branch: main

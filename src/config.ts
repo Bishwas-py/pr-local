@@ -15,17 +15,50 @@ export type Config = {
 
 export const CONFIG_NAMES = ['deploy-dev.yaml', 'deploy-dev.yml'];
 
-export function findConfig(from = process.cwd()): string | undefined {
-  let dir = from;
-  for (;;) {
-    for (const n of CONFIG_NAMES) {
-      const f = path.join(dir, n);
-      if (fs.existsSync(f)) return f;
-    }
-    const up = path.dirname(dir);
-    if (up === dir) return undefined;
-    dir = up;
+function configIn(dir: string): string | undefined {
+  return CONFIG_NAMES.map((n) => path.join(dir, n)).find((f) => fs.existsSync(f));
+}
+
+/** Does this config name cwd (or an ancestor of it) as one of its repos? */
+function claims(file: string, cwd: string): boolean {
+  let raw: any;
+  try {
+    raw = YAML.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return false;
   }
+  const root = path.dirname(file);
+  return Object.values(raw?.repos ?? {}).some((p) => {
+    const repo = expand(String(p), root);
+    return cwd === repo || cwd.startsWith(repo + path.sep);
+  });
+}
+
+/** Up from cwd first (a config in your own repo wins), then up again looking
+ *  one level sideways at each step for a config that names cwd as a repo.
+ *  The sideways walk stops at $HOME. */
+export function findConfig(from = process.cwd(), home = os.homedir()): string | undefined {
+  const cwd = path.resolve(from);
+  for (let dir = cwd; ; dir = path.dirname(dir)) {
+    const f = configIn(dir);
+    if (f) return f;
+    if (path.dirname(dir) === dir) break;
+  }
+  home = path.resolve(home);
+  for (let dir = cwd; dir === home || dir.startsWith(home + path.sep); dir = path.dirname(dir)) {
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {}
+    const claimers = entries
+      .filter((d) => d.isDirectory() && !d.name.startsWith('.') && d.name !== 'node_modules')
+      .map((d) => configIn(path.join(dir, d.name)))
+      .filter((f): f is string => !!f && claims(f, cwd));
+    if (claimers.length > 1) throw new Error(`both ${claimers.join(' and ')} name ${cwd} as a repo; pass --config to say which`);
+    if (claimers.length === 1) return claimers[0];
+    if (dir === home) break;
+  }
+  return undefined;
 }
 
 function expand(p: string, root: string): string {
@@ -35,7 +68,7 @@ function expand(p: string, root: string): string {
 
 export function loadConfig(file?: string): Config {
   const f = file ?? findConfig();
-  if (!f) throw new Error(`no ${CONFIG_NAMES[0]} found here or above; pass --config`);
+  if (!f) throw new Error(`no ${CONFIG_NAMES[0]} found from ${process.cwd()} upward, nor in a sibling directory below ${os.homedir()} that names this repo; pass --config`);
   const raw = YAML.parse(fs.readFileSync(f, 'utf8')) ?? {};
   const root = path.dirname(path.resolve(f));
   const repos: Record<string, string> = {};
