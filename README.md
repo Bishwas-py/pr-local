@@ -5,7 +5,7 @@ Run an unmerged PR on your own machine, in minutes, before the merge.
 ```
 deploy-dev --pr 12
 deploy-dev --addpr 12 13
-deploy-dev CLA-601
+deploy-dev PROJ-601
 deploy-dev --pr 12 --fillindata
 ```
 
@@ -49,8 +49,8 @@ numbers per repo and the same branch name, and this is what makes that work.
 If a number names two different branches across repos, the tool says so and
 asks for the branch instead.
 
-**`CLA-601`**, a ticket id. Only when the config says what a ticket looks like
-(`ticket: cla-{id}`); it becomes a branch search (`*cla-601*`) in every repo.
+**`PROJ-601`**, a ticket id. Only when the config says what a ticket looks like
+(`ticket: proj-{id}`); it becomes a branch search (`*proj-601*`) in every repo.
 
 **`--addpr 12 13`**. Several PRs merged together locally. The first is the
 base, the rest are merged in; conflicts go to autosolve when it is on.
@@ -100,7 +100,7 @@ error, not a guess. Paths are relative to the file.
 
 ```yaml
 default_branch: main
-ticket: cla-{id}
+ticket: proj-{id}
 
 repos:
   api: .
@@ -130,7 +130,7 @@ services:
     repo: api
     paths: ["cmd/worker/**"]
     needs: [db]
-    ask: [HATCHET_CLIENT_TOKEN]
+    ask: [QUEUE_CLIENT_TOKEN]
     start: go run ./cmd/worker
 
   web:
@@ -221,8 +221,8 @@ every run:
 
 ```
 autosolve made 2 changes
-  local  atlas ledger had the pre-rename version applied, set it to 20260828130000   api:
-  local  seed processing-log filings that disagree, so CLA-611's loud lines show    api: scripts/seed-processing-log.sql
+  local  migration ledger had a pre-rename version applied, set it forward      api:
+  local  seed the failing records this page exists to surface                   api: scripts/seed.sql
 0 belong in the PR. 2 never leave this machine.
 ```
 

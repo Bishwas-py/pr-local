@@ -55,20 +55,20 @@ test('no route files means the service url', () => {
 });
 
 test('parseTarget tells a pr number, a ticket and a branch apart', () => {
-  assert.deepEqual(parseTarget('298', 'cla-{id}'), { pr: 298 });
-  assert.deepEqual(parseTarget('CLA-601', 'cla-{id}'), { ticket: 'cla-601' });
-  assert.deepEqual(parseTarget('user/cla-601-steps', 'cla-{id}'), { branch: 'user/cla-601-steps' });
-  assert.deepEqual(parseTarget('CLA-601', undefined), { branch: 'CLA-601' });
+  assert.deepEqual(parseTarget('298', 'proj-{id}'), { pr: 298 });
+  assert.deepEqual(parseTarget('PROJ-601', 'proj-{id}'), { ticket: 'proj-601' });
+  assert.deepEqual(parseTarget('user/proj-601-steps', 'proj-{id}'), { branch: 'user/proj-601-steps' });
+  assert.deepEqual(parseTarget('PROJ-601', undefined), { branch: 'PROJ-601' });
 });
 
 import { pickBranch } from '../src/plan.ts';
 
 test('an ambiguous PR number is settled by the repo you are standing in', () => {
-  const found = new Map([['user/cla-580', ['api']], ['user/cla-581', ['web']]]);
-  assert.deepEqual(pickBranch(found, 'web'), { branch: 'user/cla-581' });
-  assert.deepEqual(pickBranch(found, 'api'), { branch: 'user/cla-580' });
-  assert.deepEqual(pickBranch(found, undefined), { ambiguous: ['user/cla-580 (api)', 'user/cla-581 (web)'] });
-  assert.deepEqual(pickBranch(found, 'other'), { ambiguous: ['user/cla-580 (api)', 'user/cla-581 (web)'] });
+  const found = new Map([['user/proj-580', ['api']], ['user/proj-581', ['web']]]);
+  assert.deepEqual(pickBranch(found, 'web'), { branch: 'user/proj-581' });
+  assert.deepEqual(pickBranch(found, 'api'), { branch: 'user/proj-580' });
+  assert.deepEqual(pickBranch(found, undefined), { ambiguous: ['user/proj-580 (api)', 'user/proj-581 (web)'] });
+  assert.deepEqual(pickBranch(found, 'other'), { ambiguous: ['user/proj-580 (api)', 'user/proj-581 (web)'] });
 });
 
 test('one branch across repos needs no tie break', () => {

@@ -24,9 +24,9 @@ test('a short local dev password is not blanked out of every path', () => {
 });
 
 test('secret-looking names are recognised, plain ones are not', () => {
-  for (const n of ['FOO_API_KEY', 'CLERK_SECRET_KEY', 'DB_PASSWORD', 'HATCHET_CLIENT_TOKEN', 'PRIVATE_MAKO_ADMIN_API_KEY'])
+  for (const n of ['FOO_API_KEY', 'SESSION_SECRET_KEY', 'DB_PASSWORD', 'QUEUE_CLIENT_TOKEN', 'PRIVATE_ADMIN_API_KEY'])
     assert.ok(isSecretName(n), n);
-  for (const n of ['PORT', 'DB_HOST', 'ENABLE_AUTH', 'PUBLIC_POSTHOG_HOST', 'API_BASE_URL'])
+  for (const n of ['PORT', 'DB_HOST', 'ENABLE_AUTH', 'PUBLIC_ANALYTICS_HOST', 'API_BASE_URL'])
     assert.ok(!isSecretName(n), n);
 });
 
@@ -48,8 +48,8 @@ test('parseEnvFile reads KEY=value, quotes and comments like dotenv does', () =>
 
 test('an unset variable named by a failure is picked out of the log', () => {
 
-  const log = 'fatal: Configuration validation failed: PRIVATE_GOOGLE_API_KEY must be set when driftscan is configured (DRIFTSCAN_BASE_URL is set)';
-  assert.deepEqual(unsetVars(log, { DRIFTSCAN_BASE_URL: 'x' }), ['PRIVATE_GOOGLE_API_KEY']);
+  const log = 'fatal: Configuration validation failed: SEARCH_API_KEY must be set when the search service is configured (SEARCH_BASE_URL is set)';
+  assert.deepEqual(unsetVars(log, { SEARCH_BASE_URL: 'x' }), ['SEARCH_API_KEY']);
   assert.deepEqual(unsetVars('Error: missing required env FOO_TOKEN\nHINT: set BAR_KEY', {}), ['FOO_TOKEN', 'BAR_KEY']);
   assert.deepEqual(unsetVars('listen tcp :8090: bind: address already in use', {}), []);
   assert.deepEqual(unsetVars('FOO_TOKEN is unset', { FOO_TOKEN: 'set' }), []);

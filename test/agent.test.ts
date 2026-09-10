@@ -5,7 +5,7 @@ import { guardToolUse, autosolvePrompt, agentEnv } from '../src/agent.ts';
 test('the agent may not read env files or the secret store', () => {
   assert.equal(guardToolUse('Read', { file_path: '/x/app/.env' }).allow, false);
   assert.equal(guardToolUse('Read', { file_path: '/x/app/.env.local' }).allow, false);
-  assert.equal(guardToolUse('Bash', { command: 'cat ../clark/.env' }).allow, false);
+  assert.equal(guardToolUse('Bash', { command: 'cat ../sibling/.env' }).allow, false);
   assert.equal(guardToolUse('Bash', { command: 'cat ~/.config/deploy-dev/secrets.json' }).allow, false);
   assert.equal(guardToolUse('Bash', { command: 'env | grep KEY' }).allow, false);
   assert.equal(guardToolUse('Glob', { pattern: '**/.env*' }).allow, false);
@@ -31,6 +31,6 @@ test('the prompt never carries a secret value, only the fact that a name is unse
 });
 
 test('the agent process env has no secret in it', () => {
-  const env = agentEnv({ PATH: '/bin', HOME: '/h', FOO_API_KEY: 'x', CLERK_SECRET_KEY: 'y', DATABASE_URL: 'postgres://u:pw@h/db' }, ['DATABASE_URL']);
+  const env = agentEnv({ PATH: '/bin', HOME: '/h', FOO_API_KEY: 'x', SESSION_SECRET_KEY: 'y', DATABASE_URL: 'postgres://u:pw@h/db' }, ['DATABASE_URL']);
   assert.deepEqual(env, { PATH: '/bin', HOME: '/h' });
 });

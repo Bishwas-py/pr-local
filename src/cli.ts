@@ -14,7 +14,7 @@ const USAGE = `usage: deploy-dev [<pr|ticket|branch> ...] [options]
 
   deploy-dev --pr 12                 run PR 12 instead of the default branch
   deploy-dev --addpr 12 13           run PRs 12 and 13 merged together
-  deploy-dev CLA-601                 a ticket id, when the config says what one looks like
+  deploy-dev PROJ-601                 a ticket id, when the config says what one looks like
   deploy-dev user/some-branch        a branch name
   deploy-dev --pr-list               open PRs in every repo of the stack
 
