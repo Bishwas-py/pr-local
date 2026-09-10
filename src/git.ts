@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +14,13 @@ export function gitOk(cwd: string, ...args: string[]): boolean {
 
 export const worktreeRoot = () =>
   path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'deploy-dev', 'worktrees');
+
+/** A worktree dir unique to this repo: name for humans, a hash of the repo's
+ *  absolute path so two stacks with a same-named repo never collide. */
+export function worktreePath(name: string, repoDir: string): string {
+  const h = createHash('sha1').update(path.resolve(repoDir)).digest('hex').slice(0, 8);
+  return path.join(worktreeRoot(), `${name}-${h}`);
+}
 
 export function prBranch(repoDir: string, pr: number): string | undefined {
   const r = spawnSync('gh', ['pr', 'view', String(pr), '--json', 'headRefName', '-q', '.headRefName'], {
@@ -31,11 +39,15 @@ export type Checkout = { dir: string; branch: string; prHead: string; merged: st
 /** A scratch worktree on branch deploy-dev/<first>, with the rest merged in.
  *  Second run on the same repo is a fetch and a reset, not a clone. */
 export function prepareWorktree(name: string, repoDir: string, branches: string[], links: string[] = []): Checkout {
-  const dir = path.join(worktreeRoot(), name);
+  const dir = worktreePath(name, repoDir);
   git(repoDir, 'fetch', '--quiet', 'origin', ...branches);
-  if (!fs.existsSync(dir)) {
+  // Drop any stale worktree registration (e.g. the cache dir was rm'd by hand),
+  // then add. --force covers a path git still half-remembers.
+  git(repoDir, 'worktree', 'prune');
+  if (!fs.existsSync(path.join(dir, '.git'))) {
     fs.mkdirSync(path.dirname(dir), { recursive: true });
-    git(repoDir, 'worktree', 'add', '--quiet', '--detach', dir, `origin/${branches[0]}`);
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    git(repoDir, 'worktree', 'add', '--quiet', '--force', '--detach', dir, `origin/${branches[0]}`);
   }
   const scratch = `deploy-dev/${branches[0]}`;
   const head = `origin/${branches[0]}`;

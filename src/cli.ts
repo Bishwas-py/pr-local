@@ -1,12 +1,13 @@
 import { parseArgs } from 'node:util';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { loadConfig, type Config } from './config.ts';
 import { requiredServices, routeFor, parseTarget, pickBranch, slotFor, withPorts, type Target } from './plan.ts';
-import { git, openPrs, formatPrList, prBranch, remoteBranches, prepareWorktree, changedFiles, diffText, autosolveChanges, formatAutosolveSummary, type Checkout, type Change } from './git.ts';
+import { git, gitOk, openPrs, formatPrList, prBranch, remoteBranches, prepareWorktree, worktreePath, changedFiles, diffText, autosolveChanges, formatAutosolveSummary, type Checkout, type Change } from './git.ts';
 import { SecretStore, readEnvFiles, parseEnvFile, isSecretName, promptSecret, unsetVars, type Secrets } from './secrets.ts';
-import { start, runOnce, waitReady, stop, tail, logDir, type Running } from './proc.ts';
+import { start, runOnce, waitReady, stop, tail, logPath, type Running } from './proc.ts';
 import { runAgent, autosolvePrompt, checkPrompt, watchPrompt, parseReport, type Failure, type Report, type AgentContext } from './agent.ts';
 import { LogWatcher, errorSignature } from './watch.ts';
 
@@ -126,6 +127,11 @@ function localEnv(dir: string | undefined): Record<string, string> {
 }
 
 async function run(cfg: Config, targets: Target[], opts: Opts) {
+  const stackId = createHash('sha1').update(cfg.file).digest('hex').slice(0, 8);
+  for (const [name, dir] of Object.entries(cfg.repos)) {
+    if (!fs.existsSync(dir) || !gitOk(dir, 'rev-parse', '--git-dir')) die(`repo "${name}" in ${cfg.file} points at ${dir}, which is not a git repository`);
+    if (!gitOk(dir, 'remote', 'get-url', 'origin')) die(`repo "${name}" at ${dir} has no "origin" remote; deploy-dev fetches PR branches from origin`);
+  }
   const branches = targets.map((t) => branchFor(cfg, t));
   if (branches.length) say(`branch${branches.length > 1 ? 'es' : ''}: ${branches.join(' + ')}`);
   for (const b of branches) {
@@ -144,7 +150,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
   for (const [name, dir] of Object.entries(cfg.repos)) {
     const present = branches.filter((b) => remoteBranches(dir, b).length > 0);
     const wanted = present.length ? present : [cfg.default_branch];
-    const wt = path.join(process.env.HOME ?? '', '.cache/deploy-dev/worktrees', name);
+    const wt = worktreePath(name, dir);
     checkouts[name] = await withFix({ service: name, step: 'merge' }, () => prepareWorktree(name, dir, wanted, links(name)), opts, () => ({ cwd: wt, env: {}, secrets: emptySecrets() }), store);
     changed[name] = present.length ? changedFiles(checkouts[name].dir, cfg.default_branch) : [];
     say(`${name}: ${wanted.join(' + ')}${changed[name].length ? `, ${changed[name].length} files changed` : ' (unchanged)'}`);
@@ -181,6 +187,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
   };
 
   const running = new Map<string, Running>();
+  let watcher: LogWatcher | undefined;
   cleanup = () => {
     watcher?.stop();
     for (const r of running.values()) stop(r);
@@ -224,14 +231,14 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
     }
     if (svc.setup) {
       say(`${name}: ${svc.setup}`);
-      await withFix({ service: name, step: 'setup', command: svc.setup }, () => runOnce(`${name}.setup`, svc.setup!, cwd, env), opts, ctx, store);
+      await withFix({ service: name, step: 'setup', command: svc.setup }, () => runOnce(svc.setup!, cwd, env, logPath(stackId, `${name}.setup`)), opts, ctx, store);
     }
     if (svc.start) {
       await withFix(
         { service: name, step: 'start', command: svc.start },
         async () => {
           say(`${name}: ${svc.start}`);
-          const r = start(name, svc.start!, cwd, env);
+          const r = start(svc.start!, cwd, env, logPath(stackId, name));
           running.set(name, r);
           const outcome = svc.ready ? await waitReady(svc.ready, cfg.ready_timeout * 1000, r.exited) : 'ready';
           if (outcome !== 'ready') {
@@ -257,7 +264,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
   // The automatic pass and the watcher share one agent context: the first
   // repo service that declares how to seed, else the first repo service.
   const agentHome = required.find((n) => cfg.services[n].seed && cfg.services[n].repo) ?? required.find((n) => cfg.services[n].repo);
-  const services = () => required.flatMap((n) => (cfg.services[n].ready ? [{ service: n, url: cfg.services[n].url ?? cfg.services[n].ready!, log: path.join(logDir(), `${n}.log`), worktree: cfg.services[n].repo ? checkouts[cfg.services[n].repo!].dir : undefined }] : []));
+  const services = () => required.flatMap((n) => (cfg.services[n].ready ? [{ service: n, url: cfg.services[n].url ?? cfg.services[n].ready!, log: logPath(stackId, n), worktree: cfg.services[n].repo ? checkouts[cfg.services[n].repo!].dir : undefined }] : []));
   const agentCtx = (): AgentContext | undefined => {
     if (!agentHome) return undefined;
     const svc = cfg.services[agentHome];
@@ -276,7 +283,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
     }
   };
 
-  let watcher: LogWatcher | undefined;
+
   if (!opts.noAgent && agentHome) {
     const ctx = agentCtx()!;
     const diff = Object.entries(checkouts).filter(([n]) => changed[n]?.length).map(([n, co]) => `# repo ${n}\n${diffText(co.dir, cfg.default_branch)}`).join('\n\n');

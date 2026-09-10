@@ -36,8 +36,9 @@ local Postgres):
 | With a migration ledger to repair (autosolve) | about 3 min |
 | With `--fillindata` | stack in 34s, seed data 5 to 8 min later, browser opens first |
 
-Node 22.18 or newer, git, and `gh` (for PR numbers). No build step: the tool
-runs its TypeScript directly.
+Node 22.18 or newer, git, and `gh` (for PR numbers). Installed from npm it
+ships compiled JavaScript; run from a clone it executes its TypeScript
+directly (Node strips types), so there is no build step for local dev.
 
 ## What each flag means
 
@@ -278,8 +279,14 @@ change is a commit you can read and drop.
 ## Development
 
 ```
-npm test
+npm test          # node:test against the TypeScript sources, no build needed
+npm run build     # emit dist/ (compiled JS); prepack runs this before publish
 ```
+
+The published package ships `dist/` (compiled), not the sources, because Node
+refuses to strip types under `node_modules`. The `bin` launcher runs `dist/`
+when it exists and falls back to the sources otherwise, so a clone works
+without building.
 
 MIT. Chosen because a tool that lives in other people's repos should carry
 the fewest possible conditions.

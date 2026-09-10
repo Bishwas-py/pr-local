@@ -4,7 +4,13 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
-export const logDir = () => path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'deploy-dev', 'logs');
+export const logRoot = () => path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'deploy-dev', 'logs');
+
+/** One log file per service, under a per-stack subdir so two stacks that both
+ *  have a service called "db" never write to the same file. */
+export function logPath(stackId: string, name: string): string {
+  return path.join(logRoot(), stackId, `${name}.log`);
+}
 
 export function tail(file: string, lines = 40): string {
   if (!fs.existsSync(file)) return '';
@@ -14,9 +20,8 @@ export function tail(file: string, lines = 40): string {
 export type Running = { child: ChildProcess; exited: Promise<number | null>; log: string };
 
 /** sh -c <cmd> in its own process group, stdout and stderr appended to a log file. */
-export function start(name: string, cmd: string, cwd: string, env: Record<string, string>): Running {
-  fs.mkdirSync(logDir(), { recursive: true });
-  const log = path.join(logDir(), `${name}.log`);
+export function start(cmd: string, cwd: string, env: Record<string, string>, log: string): Running {
+  fs.mkdirSync(path.dirname(log), { recursive: true });
   const out = fs.openSync(log, 'a');
   fs.writeSync(out, `\n==== ${new Date().toISOString()} ${cmd}\n`);
   const child = spawn('sh', ['-c', cmd], { cwd, env, stdio: ['ignore', out, out], detached: true });
@@ -25,8 +30,8 @@ export function start(name: string, cmd: string, cwd: string, env: Record<string
   return { child, exited, log };
 }
 
-export async function runOnce(name: string, cmd: string, cwd: string, env: Record<string, string>): Promise<string> {
-  const r = start(name, cmd, cwd, env);
+export async function runOnce(cmd: string, cwd: string, env: Record<string, string>, log: string): Promise<string> {
+  const r = start(cmd, cwd, env, log);
   const code = await r.exited;
   if (code !== 0) throw Object.assign(new Error(`${cmd} exited with ${code}`), { logTail: tail(r.log) });
   return r.log;

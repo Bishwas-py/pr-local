@@ -31,3 +31,13 @@ test('pr list prints number and title, grouped by repo', () => {
   assert.equal(s, 'api\n305  feat: snapshot\nweb\n311  feat: quiet log\n  3  x');
   assert.equal(formatPrList({ api: [] }), 'api\n  (no open PRs)');
 });
+
+import { worktreePath } from '../src/git.ts';
+
+test('two stacks with a same-named repo never share a worktree dir', () => {
+  const a = worktreePath('api', '/home/me/projectA/api');
+  const b = worktreePath('api', '/home/me/projectB/api');
+  assert.notEqual(a, b);
+  assert.ok(a.endsWith('/api-' + a.split('/api-')[1]) && /\/api-[0-9a-f]{8}$/.test(a));
+  assert.equal(a, worktreePath('api', '/home/me/projectA/api'), 'stable for the same repo');
+});

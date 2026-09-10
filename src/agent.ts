@@ -1,5 +1,5 @@
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
-import { isSecretName, redact, defaultStorePath, type Secrets } from './secrets.ts';
+import { isSecretName, redact, type Secrets } from './secrets.ts';
 
 export type Failure = {
   service: string;
@@ -74,29 +74,6 @@ export function autosolvePrompt(f: Failure, ctx: AgentContext): string {
   return redact(body, ctx.secrets);
 }
 
-export function seedPrompt(diff: string, hints: { service: string; hint: string }[], running: { service: string; url: string }[], ctx: AgentContext): string {
-  const body = [
-    `deploy-dev has a PR running locally. Decide what data this PR needs in front of a human reviewer, then create exactly that, quickly.`,
-    `Read the diff below and answer first: what state must exist for the change to be visible? A page that surfaces failures needs failed records, not healthy ones. A change with no visible surface needs nothing: then do nothing and say "needs no data".`,
-    ``,
-    `Working directory: ${ctx.cwd}`,
-    `How to seed (from the project's config):`,
-    ...hints.map((h) => `  ${h.service}: ${h.hint}`),
-    `Already running, use these to verify and never build or start a server yourself:`,
-    ...running.map((r) => `  ${r.service}: ${r.url}`),
-    `Environment variable names available to your shell: ${ctx.envNames.set.join(', ') || '(none)'}`,
-    ``,
-    `Read only what decides the shape of the data (the queries the changed screen calls and the tables behind them), then write the seed. Do not review or improve the PR.`,
-    `Write the seed script into the working directory, run it, and commit it with the subject "local: seed <what state and why>". Keep it idempotent and additive: never wipe rows you did not create.`,
-    `Never read .env files or ~/.config/deploy-dev. Never write a secret value anywhere.`,
-    ``,
-    `Diff:`,
-    '```diff',
-    diff,
-    '```'
-  ].join('\n');
-  return redact(body, ctx.secrets);
-}
 
 export type AgentResult = { ok: boolean; text: string; turns: number; costUsd: number };
 
@@ -163,7 +140,6 @@ function summarise(input: Record<string, unknown>): string {
   return s.length > 100 ? s.slice(0, 100) + '…' : s;
 }
 
-export const secretStoreHint = () => defaultStorePath();
 
 export type Report = { data: 'filled' | 'none'; issues: { found: string; fixed: boolean; kind?: 'fix' | 'local' }[]; restart: string[] };
 
