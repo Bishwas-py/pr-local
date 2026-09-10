@@ -6,7 +6,7 @@ Run an unmerged PR on your own machine, in minutes, before the merge.
 pr-local --pr 12
 pr-local --addpr 12 13
 pr-local PROJ-601
-pr-local --pr 12 --fillindata
+pr-local --pr 12
 ```
 
 Checks the PR out, brings up the smallest running stack that makes it visible,
@@ -34,7 +34,7 @@ local Postgres):
 | -- | -- |
 | First run of the day, worktrees exist | 31s |
 | With a migration ledger to repair (autosolve) | about 3 min |
-| With `--fillindata` | stack in 34s, seed data 5 to 8 min later, browser opens first |
+| With automatic seeding | stack in 34s, seed data 5 to 8 min later, browser opens first |
 
 Node 22.18 or newer, git, and `gh` (for PR numbers). Installed from npm it
 ships compiled JavaScript; run from a clone it executes its TypeScript
@@ -56,7 +56,7 @@ asks for the branch instead.
 **`--addpr 12 13`**. Several PRs merged together locally. The first is the
 base, the rest are merged in; conflicts go to autosolve when it is on.
 
-**`--fillindata`**. Seed only what this PR needs to be visible. An agent reads
+**Seeding the data the PR needs** happens automatically, no flag. An agent reads
 the diff, decides what state a human must see (a page that surfaces failures
 needs failed rows, not healthy ones), writes an idempotent seed script into
 the worktree, runs it against the running stack, and commits it as `local:`.
@@ -165,7 +165,7 @@ services:
 | `ready` | `http://` or `tcp://` probe; a service already answering is used as is |
 | `url` | where a human opens it; makes the service a screen |
 | `routes` | directory of file-based routes, for inferring the screen from the diff |
-| `seed` | free-text hint for `--fillindata` |
+| `seed` | free-text hint for the automatic data seeding |
 
 **Ports.** A service with `port:` gets its own stable offset per PR: the set
 of branches being run hashes to a slot from 1 to 99, and every such port is
