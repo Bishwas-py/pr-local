@@ -5,6 +5,10 @@ import readline from 'node:readline';
 
 export type Secrets = { values: string[]; names: string[] };
 
+/** Shorter values (a local dev password like "postgres") are not blanked out
+ *  of every path and log line; NAME=value redaction still covers them. */
+export const MIN_SECRET_LEN = 10;
+
 const SECRET_NAME = /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE|CREDENTIAL)/i;
 const PUBLIC_NAME = /^PUBLIC_/;
 
@@ -20,7 +24,7 @@ function escapeRe(s: string): string {
 /** Strips every known secret value and every NAME=value for a secret name. */
 export function redact(text: string, secrets: Secrets): string {
   let out = text;
-  for (const v of secrets.values) if (v) out = out.replaceAll(v, '<redacted>');
+  for (const v of secrets.values) if (v && v.length >= MIN_SECRET_LEN) out = out.replaceAll(v, '<redacted>');
   for (const n of secrets.names) out = out.replace(new RegExp(`(${escapeRe(n)}=)[^\\s]*`, 'g'), '$1<redacted>');
   return out;
 }

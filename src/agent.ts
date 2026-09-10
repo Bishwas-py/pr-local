@@ -50,6 +50,7 @@ Put the error you were solving in the subject, e.g. "fix: migration 20260909 con
 Never commit env files. Never write a secret value anywhere. Never read .env files or ~/.config/deploy-dev.
 If a variable is unset, the correct fix is usually "local:" and you may only note the NAME.
 A fix that changes no file (a database repaired, a container restarted) is still recorded: git commit --allow-empty with the same subject rules.
+A machine-local env var VALUE the service needs (not a secret) goes into .deploy-dev.env in the working directory as NAME=value, committed as "local: ..."; deploy-dev reads it last when starting the service.
 When you cannot fix it, say exactly what you tried and stop.`;
 
 export function autosolvePrompt(f: Failure, ctx: AgentContext): string {
@@ -130,6 +131,14 @@ export async function runAgent(prompt: string, ctx: AgentContext, log: (line: st
     }
   };
   let result: AgentResult = { ok: false, text: 'agent produced no result', turns: 0, costUsd: 0 };
+  try {
+    await consume();
+  } catch (e: any) {
+    result = { ...result, ok: false, text: `${result.text}\n${redact(String(e?.message ?? e), ctx.secrets)}` };
+  }
+  return result;
+
+  async function consume() {
   for await (const m of query({ prompt, options })) {
     if (m.type === 'assistant') {
       for (const block of (m as any).message?.content ?? []) {
@@ -146,7 +155,7 @@ export async function runAgent(prompt: string, ctx: AgentContext, log: (line: st
       };
     }
   }
-  return result;
+  }
 }
 
 function summarise(input: Record<string, unknown>): string {
@@ -155,3 +164,87 @@ function summarise(input: Record<string, unknown>): string {
 }
 
 export const secretStoreHint = () => defaultStorePath();
+
+export type Report = { data: 'filled' | 'none'; issues: { found: string; fixed: boolean; kind?: 'fix' | 'local' }[]; restart: string[] };
+
+/** The last ```json block of the agent's answer, or an empty report. */
+export function parseReport(text: string): Report {
+  const blocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)];
+  const empty: Report = { data: 'none', issues: [], restart: [] };
+  if (!blocks.length) return empty;
+  try {
+    const r = JSON.parse(blocks[blocks.length - 1][1]);
+    return {
+      data: r.data === 'filled' ? 'filled' : 'none',
+      issues: Array.isArray(r.issues) ? r.issues.map((i: any) => ({ found: String(i.found ?? ''), fixed: !!i.fixed, kind: i.kind === 'fix' ? 'fix' : i.kind === 'local' ? 'local' : undefined })) : [],
+      restart: Array.isArray(r.restart) ? r.restart.map(String) : []
+    };
+  } catch {
+    return empty;
+  }
+}
+
+const REPORT_RULES = `End your answer with exactly one json block:
+\`\`\`json
+{"data":"filled"|"none","issues":[{"found":"<what was wrong, one line>","fixed":true|false,"kind":"fix"|"local"}],"restart":["<service>"]}
+\`\`\`
+"restart" lists services whose process must be restarted for your change to apply (a code change, or a new line in .deploy-dev.env). deploy-dev restarts them; never start or stop a service yourself.
+A machine-local setting a service needs (an env var value for this machine only) goes into the file .deploy-dev.env in the working directory as NAME=value, committed as "local: ...". deploy-dev reads that file last when starting the service. Never put a secret value in it; a secret is asked from the user by deploy-dev, so say "<NAME> is unset" in the report instead.`;
+
+export type CheckInput = {
+  diff: string;
+  hints: { service: string; hint: string }[];
+  running: { service: string; url: string; log: string; worktree?: string }[];
+  logTails: Record<string, string>;
+  screen?: string;
+  priorCommits: string;
+};
+
+/** One pass after boot: is data needed, and does the screen actually work. */
+export function checkPrompt(input: CheckInput, ctx: AgentContext): string {
+  const body = [
+    `deploy-dev has a PR running locally so a human can review it. Two questions, answer both by acting, quickly:`,
+    `1. DATA: what state must exist for this change to be visible? A page that surfaces failures needs failed rows, not healthy ones. If the change has no visible surface, nothing: report data "none". Otherwise write an idempotent, additive seed script into the working directory, run it, commit it as "local: seed <what and why>".`,
+    `2. RUNTIME: does the screen work against this local stack? Fetch the screen and the API calls it makes, read the service logs below for 4xx/5xx/errors, and exercise the endpoints the diff touches. A boot that answers its health check can still fail every real request (a 401 on an endpoint that needs a token subject, a missing local setting, a stale generated client).`,
+    `For every issue: fix it if it is this machine's problem (kind "local") or the PR's (kind "fix"), one commit each, prefixed "fix:" or "local:", the error in the subject. Do not improve anything else.`,
+    ``,
+    `Budget: about 30 tool calls in total. Seed first and commit it as soon as it runs; then the runtime check. Do not mint or forge tokens and do not read authentication code: if an endpoint needs a token you do not have, curl it once, record the status in the report, and move on. Stay inside the working directories listed below; read nothing else on this machine.`,
+    `Already on the scratch branch from earlier runs (reuse, never redo):`,
+    input.priorCommits || '  (nothing yet)',
+    ``,
+    `Working directory: ${ctx.cwd}`,
+    `Screen under review: ${input.screen ?? '(none inferred)'}`,
+    `Running services (use them, never start your own):`,
+    ...input.running.map((r) => `  ${r.service}: ${r.url}  log: ${r.log}${r.worktree ? `  code: ${r.worktree}` : ''}`),
+    `How to seed:`,
+    ...input.hints.map((h) => `  ${h.service}: ${h.hint}`),
+    `Environment variable names available to your shell: ${ctx.envNames.set.join(', ') || '(none)'}`,
+    `Never read .env files or ~/.config/deploy-dev. Never write a secret value anywhere.`,
+    ``,
+    ...Object.entries(input.logTails).flatMap(([s, t]) => [`Recent log of ${s}:`, '```', t, '```']),
+    ``,
+    `Diff:`,
+    '```diff',
+    input.diff,
+    '```',
+    REPORT_RULES
+  ].join('\n');
+  return redact(body, ctx.secrets);
+}
+
+export function watchPrompt(service: string, lines: string[], running: CheckInput['running'], ctx: AgentContext): string {
+  const body = [
+    `deploy-dev is running a PR locally and a reviewer is clicking through it. The "${service}" service just logged errors while they did:`,
+    '```',
+    lines.join('\n'),
+    '```',
+    `Find the cause in the running stack and fix it if it is this machine's problem (kind "local") or the PR's (kind "fix"); one commit each, prefixed "fix:" or "local:", the error in the subject. If it is neither (an external service down, a deliberate refusal), say so and fix nothing.`,
+    `Working directory: ${ctx.cwd}`,
+    `Running services (use them, never start your own):`,
+    ...running.map((r) => `  ${r.service}: ${r.url}  log: ${r.log}${r.worktree ? `  code: ${r.worktree}` : ''}`),
+    `Environment variable names available to your shell: ${ctx.envNames.set.join(', ') || '(none)'}`,
+    `Never read .env files or ~/.config/deploy-dev. Never write a secret value anywhere.`,
+    REPORT_RULES
+  ].join('\n');
+  return redact(body, ctx.secrets);
+}

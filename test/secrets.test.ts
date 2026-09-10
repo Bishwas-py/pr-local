@@ -14,8 +14,13 @@ test('redact strips every known value and every NAME=value of a secret name', ()
 });
 
 test('redact handles a value that appears inside a url', () => {
-  const out = redact('postgres://u:hunter2@localhost/db', { values: ['hunter2'], names: [] });
+  const out = redact('postgres://u:hunter2hunter2@localhost/db', { values: ['hunter2hunter2'], names: [] });
   assert.equal(out, 'postgres://u:<redacted>@localhost/db');
+});
+
+test('a short local dev password is not blanked out of every path', () => {
+  const out = redact('/opt/homebrew/opt/postgresql@17 DB_PASSWORD=postgres', { values: ['postgres'], names: ['DB_PASSWORD'] });
+  assert.equal(out, '/opt/homebrew/opt/postgresql@17 DB_PASSWORD=<redacted>');
 });
 
 test('secret-looking names are recognised, plain ones are not', () => {

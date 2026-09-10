@@ -45,6 +45,8 @@ export function prepareWorktree(name: string, repoDir: string, branches: string[
     git(dir, 'checkout', '--quiet', '-B', scratch, head);
   }
   const prHead = git(dir, 'rev-parse', head);
+  git(dir, 'checkout', '--quiet', '--', '.');
+  git(dir, 'clean', '-fdq', ...links.flatMap((l) => ['-e', l]));
   for (const l of links) {
     const src = path.join(repoDir, l);
     const dst = path.join(dir, l);
