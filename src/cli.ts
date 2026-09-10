@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { loadConfig, type Config } from './config.ts';
-import { requiredServices, routeFor, parseTarget, pickBranch, type Service, type Target } from './plan.ts';
+import { requiredServices, routeFor, parseTarget, pickBranch, slotFor, withPorts, type Service, type Target } from './plan.ts';
 import { prBranch, remoteBranches, prepareWorktree, changedFiles, diffText, autosolveChanges, formatAutosolveSummary, type Checkout, type Change } from './git.ts';
 import { SecretStore, readEnvFiles, isSecretName, promptSecret, unsetVars, type Secrets } from './secrets.ts';
 import { git, openPrs, formatPrList } from './git.ts';
@@ -114,6 +114,9 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
       die(`branch ${b} no longer exists on any remote; the PR was probably merged or closed. Try deploy-dev --pr-list for what is open.`);
     }
   }
+  const slot = slotFor(branches.length ? branches : [cfg.default_branch]);
+  cfg.services = withPorts(cfg.services, slot);
+  if (Object.values(cfg.services).some((s) => s.port)) say(`slot ${slot}: ports are base + ${slot * 100}`);
 
   const store = new SecretStore();
   const checkouts: Record<string, Checkout> = {};
@@ -174,7 +177,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
     const env = envs[name];
     const ctx = () => ({ cwd, env, secrets: secretsFor(name), extraEnv: pick(env, svc.agent_env) });
     if (svc.ready && (await waitReady(svc.ready, 2000)) === 'ready') {
-      if (svc.repo) die(`${name} already answers at ${svc.ready}; stop it first, deploy-dev needs that port for the PR's build`);
+      if (svc.repo) die(`${name} already answers at ${svc.ready}; this PR is already running (or something else took its port). Stop it first.`);
       status[name] = `already running at ${svc.ready}`;
       say(`${name}: already running at ${svc.ready}`);
       continue;

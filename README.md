@@ -113,12 +113,13 @@ services:
     repo: api
     needs: [db]
     env_files: [.env]
-    env: { PORT: "8090", ENABLE_AUTH: "false" }
+    port: 8090
+    env: { PORT: "${port}", ENABLE_AUTH: "false" }
     ask: [PRIVATE_GOOGLE_API_KEY]
     agent_env: [DATABASE_URL]
     setup: ./db/apply_migrations.sh
     start: go run .
-    ready: http://localhost:8090/api/health
+    ready: http://localhost:${port}/api/health
     seed: >-
       Postgres, reachable with psql "$DATABASE_URL". db/seed.sql refills the
       operator tables. The portal reads magic_links, submissions, submission_outbox.
@@ -134,10 +135,12 @@ services:
     repo: web
     needs: [api]
     env_files: [.env, .env.local]
+    port: 5173
+    env: { API_BASE_URL: "http://localhost:${api.port}/api/v1" }
     link: [node_modules]
-    start: npm run dev
-    ready: http://localhost:5173/admin/api/health
-    url: http://localhost:5173/admin
+    start: npm run dev -- --port ${port}
+    ready: http://localhost:${port}/admin/api/health
+    url: http://localhost:${port}/admin
     routes: src/routes
 ```
 
@@ -150,6 +153,7 @@ services:
 | `env` | literal, non-secret values |
 | `ask` | secrets to ask for once, if not already in the environment or an env file |
 | `agent_env` | vars the autosolve and seed agents may see, never anything in `ask` |
+| `port` | base port; the run's slot is added, and `${port}` / `${name.port}` fill in |
 | `link` | paths symlinked from your checkout into the scratch worktree (node_modules) |
 | `setup` | one-shot command before start (migrations) |
 | `start` | the long-running command; omitted for something already running |
@@ -157,6 +161,13 @@ services:
 | `url` | where a human opens it; makes the service a screen |
 | `routes` | directory of file-based routes, for inferring the screen from the diff |
 | `seed` | free-text hint for `--fillindata` |
+
+**Ports.** A service with `port:` gets its own stable offset per PR: the set
+of branches being run hashes to a slot from 1 to 99, and every such port is
+base plus slot times 100. `${port}` and `${api.port}` in that service's
+`env`, `setup`, `start`, `ready` and `url` are filled in. So PR 12 always
+lands on the same ports, PR 12 plus 13 on another set, and none of them on
+your own dev server's. Services without `port:` (a database) are untouched.
 
 Services run from scratch git worktrees under `~/.cache/deploy-dev/worktrees/`,
 on a branch named `deploy-dev/<branch>`, so your own checkout, its branch and

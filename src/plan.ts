@@ -15,6 +15,7 @@ export type Service = {
   routes?: string;
   seed?: string;
   agent_env?: string[];
+  port?: number;
 };
 export type Services = Record<string, Service>;
 
@@ -105,4 +106,34 @@ export function pickBranch(found: Map<string, string[]>, currentRepo: string | u
   if (found.size === 1) return { branch: [...found.keys()][0] };
   for (const [branch, repos] of found) if (currentRepo && repos.includes(currentRepo)) return { branch };
   return { ambiguous: [...found].map(([b, r]) => `${b} (${r.join(', ')})`) };
+}
+
+/** A stable 1..99 slot for a set of branches, so one PR (or one combination
+ *  of PRs) always lands on the same ports and never on another's. */
+export function slotFor(branches: string[]): number {
+  const key = [...branches].sort().join('+');
+  let h = 0x811c9dc5;
+  for (const c of key) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193) >>> 0;
+  return 1 + (h % 99);
+}
+
+/** Each service's base port moved up by slot*100, and every ${port} /
+ *  ${name.port} in its strings filled in with the moved ports. */
+export function withPorts(services: Services, slot: number): Services {
+  const ports: Record<string, number> = {};
+  for (const [name, s] of Object.entries(services)) if (s.port) ports[name] = s.port + slot * 100;
+  const fill = (name: string, v: string) =>
+    v.replace(/\$\{(?:(\w+)\.)?port\}/g, (m, ref) => {
+      const p = ports[ref ?? name];
+      if (p === undefined) throw new Error(`${name}: ${m} refers to a service without a port`);
+      return String(p);
+    });
+  const out: Services = {};
+  for (const [name, s] of Object.entries(services)) {
+    const svc: Service = { ...s, port: ports[name] };
+    for (const k of ['setup', 'start', 'ready', 'url'] as const) if (svc[k]) svc[k] = fill(name, svc[k]!);
+    if (svc.env) svc.env = Object.fromEntries(Object.entries(svc.env).map(([k, v]) => [k, fill(name, String(v))]));
+    out[name] = svc;
+  }
+  return out;
 }

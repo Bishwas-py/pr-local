@@ -75,3 +75,31 @@ test('one branch across repos needs no tie break', () => {
   assert.deepEqual(pickBranch(new Map([['user/x', ['api', 'web']]]), undefined), { branch: 'user/x' });
   assert.deepEqual(pickBranch(new Map(), 'web'), { none: true });
 });
+
+import { slotFor, withPorts } from '../src/plan.ts';
+
+test('a branch set always maps to the same slot, order-independent', () => {
+  assert.equal(slotFor(['a', 'b']), slotFor(['b', 'a']));
+  assert.notEqual(slotFor(['a']), slotFor(['b']));
+  assert.ok(slotFor(['a']) >= 1 && slotFor(['a']) <= 99);
+  assert.equal(slotFor([]), slotFor([]));
+});
+
+test('ports shift by the slot and ${port} / ${svc.port} are filled in everywhere', () => {
+  const out = withPorts(
+    {
+      db: { ready: 'tcp://localhost:5432' },
+      api: { port: 8090, env: { PORT: '${port}' }, ready: 'http://localhost:${port}/health' },
+      web: { port: 5173, needs: ['api'], env: { API: 'http://localhost:${api.port}/v1' }, start: 'vite --port ${port}', url: 'http://localhost:${port}/admin' }
+    },
+    12
+  );
+  assert.equal(out.db.ready, 'tcp://localhost:5432');
+  assert.equal(out.api.port, 9290);
+  assert.deepEqual(out.api.env, { PORT: '9290' });
+  assert.equal(out.api.ready, 'http://localhost:9290/health');
+  assert.equal(out.web.port, 6373);
+  assert.deepEqual(out.web.env, { API: 'http://localhost:9290/v1' });
+  assert.equal(out.web.start, 'vite --port 6373');
+  assert.equal(out.web.url, 'http://localhost:6373/admin');
+});
