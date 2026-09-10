@@ -8,34 +8,28 @@ import { requiredServices, routeFor, parseTarget, pickBranch, slotFor, withPorts
 import { git, gitOk, openPrs, formatPrList, prBranch, remoteBranches, prepareWorktree, worktreePath, changedFiles, diffText, autosolveChanges, formatAutosolveSummary, type Checkout, type Change } from './git.ts';
 import { SecretStore, readEnvFiles, parseEnvFile, isSecretName, promptSecret, unsetVars, type Secrets } from './secrets.ts';
 import { start, runOnce, waitReady, stop, tail, logPath, type Running } from './proc.ts';
-import { runAgent, autosolvePrompt, checkPrompt, watchPrompt, parseReport, type Failure, type Report, type AgentContext } from './agent.ts';
+import { runAgent, autosolvePrompt, diagnosePrompt, checkPrompt, watchPrompt, parseReport, type Failure, type Report, type AgentContext } from './agent.ts';
 import { LogWatcher, errorSignature } from './watch.ts';
 
-const USAGE = `usage: pr-local [<pr|ticket|branch> ...] [options]
+const USAGE = `usage: pr-local <pr | branch | ticket>
 
-  pr-local --pr 12                 run PR 12 instead of the default branch
-  pr-local --addpr 12 13           run PRs 12 and 13 merged together
-  pr-local PROJ-601                 a ticket id, when the config says what one looks like
+  pr-local --pr 12                 run PR 12 locally
+  pr-local 12                      same, bare number
   pr-local user/some-branch        a branch name
-  pr-local --pr-list               open PRs in every repo of the stack
-  pr-local init                    write a starter pr-local.yaml here
+  pr-local PROJ-601                a ticket id (when the config maps one)
+  pr-local --addpr 12 13           several PRs merged together
+  pr-local --pr-list               list open PRs to pick from
 
-Everything else is automatic: a boot failure is fixed and retried, the data
-the change needs is seeded, the screen is checked against the running stack,
-and errors logged while you click are looked into. Every change is a commit
-on the scratch branch, prefixed fix: (belongs in the PR) or local: (this
-machine only), and summarised at the end.
+The first run in a new repo writes a starter pr-local.yaml for you to fill in.
+After that, one command boots the smallest stack the PR needs, seeds the data
+it needs to be visible, checks the screen works, and opens it. It fixes a
+broken boot on its own and looks into errors while you click. No AI runs if
+you have no key or login.
 
-options
-  --open <path>       open this path instead of the one inferred from the diff
-  --services a,b      boot exactly these instead of inferring from the diff
-  --config <file>     pr-local.yaml to use (default: nearest one that names this repo)
-  --model <name>      agent model (default claude-opus-5)
-  --no-agent          no model calls at all: stop at errors, seed nothing, watch nothing
-  --no-seed           keep autosolve and the watch, but do not fill in any data
-  --no-open           do not open a browser
-  --attempts <n>      fix attempts per failing step (default 3)
+less-used flags: --no-seed (skip the data), --no-fix (diagnose, do not edit),
+--services a,b, --open <path>, --config <file>, --model <name>, --attempts <n>
 `;
+
 
 const t0 = Date.now();
 const elapsed = () => {
@@ -53,7 +47,7 @@ process.on('uncaughtException', (e) => die(`unexpected: ${e.message}`));
 process.on('unhandledRejection', (e: any) => die(`unexpected: ${e?.message ?? e}`));
 const openBrowser = (url: string) => spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { stdio: 'ignore', detached: true }).unref();
 
-type Opts = { open?: string; services?: string[]; model?: string; noOpen: boolean; noAgent: boolean; noSeed: boolean; attempts: number };
+type Opts = { open?: string; services?: string[]; model?: string; noSeed: boolean; noFix: boolean; agent: boolean; openBrowser: boolean; attempts: number };
 
 function main() {
   const { values, positionals } = parseArgs({
@@ -66,9 +60,8 @@ function main() {
       services: { type: 'string' },
       config: { type: 'string' },
       model: { type: 'string' },
-      'no-open': { type: 'boolean' },
-      'no-agent': { type: 'boolean' },
       'no-seed': { type: 'boolean' },
+      'no-fix': { type: 'boolean' },
       'pr-list': { type: 'boolean' },
       attempts: { type: 'string', default: '3' },
       help: { type: 'boolean', short: 'h' }
@@ -78,8 +71,9 @@ function main() {
     process.stdout.write(USAGE);
     return;
   }
-  if (positionals[0] === 'init') return initConfig();
-  const cfg = loadConfig(values.config);
+  const found = values.config ?? findConfig();
+  if (!found) return autoInit();
+  const cfg = loadConfig(found);
   if (values['pr-list']) {
     process.stdout.write(formatPrList(Object.fromEntries(Object.entries(cfg.repos).map(([n, d]) => [n, openPrs(d)]))) + '\n');
     return;
@@ -92,9 +86,10 @@ function main() {
     open: values.open,
     services: values.services?.split(',').map((s) => s.trim()).filter(Boolean),
     model: values.model,
-    noOpen: !!values['no-open'],
-    noAgent: !!values['no-agent'],
     noSeed: !!values['no-seed'],
+    noFix: !!values['no-fix'],
+    agent: agentAvailable(cfg),
+    openBrowser: process.stdout.isTTY === true && !process.env.CI,
     attempts: Number(values.attempts)
   });
 }
@@ -227,7 +222,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
       if (svc.repo) {
         const u = url();
         say(`${name} already answers at ${svc.ready}: this PR is already running${u ? `, screen: ${u}` : ''}`);
-        if (u && !opts.noOpen) openBrowser(u);
+        if (u && opts.openBrowser) openBrowser(u);
         shutdown();
       }
       status[name] = `already running at ${svc.ready}`;
@@ -264,7 +259,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
 
   const screen = url();
   say(`stack up in ${elapsed()}${screen ? `, screen: ${screen}` : ''}`);
-  if (screen && !opts.noOpen) openBrowser(screen);
+  if (screen && opts.openBrowser) openBrowser(screen);
 
   // The automatic pass and the watcher share one agent context: the first
   // repo service that declares how to seed, else the first repo service.
@@ -289,7 +284,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
   };
 
 
-  if (!opts.noAgent && agentHome) {
+  if (opts.agent && agentHome) {
     const ctx = agentCtx()!;
     const diff = Object.entries(checkouts).filter(([n]) => changed[n]?.length).map(([n, co]) => `# repo ${n}\n${diffText(co.dir, cfg.default_branch)}`).join('\n\n');
     const hints = required.filter((n) => cfg.services[n].seed).map((n) => ({ service: n, hint: cfg.services[n].seed! }));
@@ -317,7 +312,7 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
     if (!fresh.length) return;
     say(`${b.service} logged ${fresh.length} new error${fresh.length > 1 ? 's' : ''} while you were using it`);
     for (const l of fresh.slice(0, 5)) say(`  ${l.replace(/\x1b\[[0-9;]*m/g, '').trim().slice(0, 160)}`);
-    if (opts.noAgent || !agentHome || busy || runs >= 5) return;
+    if (!opts.agent || opts.noFix || !agentHome || busy || runs >= 5) return;
     busy = true;
     runs++;
     say(`looking into it (${runs}/5)`);
@@ -343,14 +338,14 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
   process.stderr.write(`ready in ${elapsed()}\n`);
   for (const name of required) process.stderr.write(`  ${name.padEnd(10)} ${status[name] ?? 'external'}\n`);
   if (screen) process.stderr.write(`  screen     ${screen}\n`);
-  if (!opts.noAgent) {
+  if (opts.agent) {
     process.stderr.write(`  data       ${opts.noSeed ? 'seeding off (--no-seed)' : data === 'filled' ? 'seeded for this change (reload the screen)' : 'nothing needed'}\n`);
     const fixed = found.filter((i) => i.fixed).length;
     process.stderr.write(`  issues     ${found.length ? `${found.length} found, ${fixed} fixed` : 'none found'}\n`);
     for (const i of found.filter((x) => !x.fixed)) process.stderr.write(`             not fixed: ${i.found}\n`);
   }
   process.stderr.write(formatAutosolveSummary(changes) + '\n');
-  if (running.size) process.stderr.write(`services keep running and errors you hit are ${opts.noAgent ? 'reported' : 'looked into'}; ctrl-c stops them\n`);
+  if (running.size) process.stderr.write(`services keep running and errors you hit are ${opts.agent && !opts.noFix ? 'looked into' : 'reported'}; ctrl-c stops them\n`);
   else process.exit(0);
 }
 
@@ -390,9 +385,18 @@ async function withFix<T>(where: Omit<Failure, 'message' | 'logTail'>, fn: () =>
         attempt--;
         continue;
       }
-      if (opts.noAgent) {
+      if (!opts.agent) {
         process.stderr.write(`\n${failure.service} failed at ${failure.step}: ${failure.message}\n${failure.logTail}\n`);
-        die(`--no-agent is set; fix it by hand in ${ctx().cwd}`);
+        die(`no AI available (no key or login); fix it by hand in ${ctx().cwd}`);
+      }
+      if (opts.noFix) {
+        const c = ctx();
+        const actx: AgentContext = { cwd: e.dir ?? c.cwd, envNames: { set: Object.keys(c.env), unset: [] }, secrets: c.secrets, model: opts.model, extraEnv: c.extraEnv };
+        process.stderr.write(`\n${failure.service} failed at ${failure.step}: ${failure.message}\n${failure.logTail}\n`);
+        say(`--no-fix: diagnosing without editing`);
+        const r = await runAgent(diagnosePrompt(failure, actx), actx, (l) => say(`  agent: ${l}`));
+        process.stderr.write(`\n${r.text}\n`);
+        die(`--no-fix is set; the diagnosis above is not applied. Fix it in ${actx.cwd}, or drop --no-fix.`);
       }
       if (attempt > opts.attempts) {
         process.stderr.write(`\n${failure.service} still fails at ${failure.step} after ${opts.attempts} attempts: ${failure.message}\nwhat was tried:\n${tried.map((t) => `  - ${t}`).join('\n')}\n${failure.logTail}\n`);
@@ -414,12 +418,20 @@ async function withFix<T>(where: Omit<Failure, 'message' | 'logTail'>, fn: () =>
   }
 }
 
-function initConfig() {
+/** First run in a repo with no config: scaffold one and stop so it can be filled in. */
+function autoInit() {
   const target = path.join(process.cwd(), CONFIG_NAMES[0]);
-  const here = findConfig();
-  if (here) return die(`a config already applies here: ${here}. Edit it, or run pr-local from a repo it does not cover.`);
+  if (fs.existsSync(target)) return die(`${target} exists but does not cover this directory; edit it, or pass --config.`);
   fs.writeFileSync(target, sampleConfig());
-  process.stderr.write(`wrote ${target}\nEdit the repos and the start/ready lines for your stack, then run pr-local --pr <n>.\n`);
+  process.stderr.write(`No config yet, so I wrote ${CONFIG_NAMES[0]} here.\nOpen it, set your repos and the start/ready lines, then run pr-local --pr <n>.\n`);
+}
+
+/** The agent runs only when there is a way to reach it and the config allows it. */
+function agentAvailable(cfg: Config): boolean {
+  if (cfg.agent === false) return false;
+  if (process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_CODE_OAUTH_TOKEN) return true;
+  const home = process.env.HOME ?? '';
+  return ['.claude/.credentials.json', '.claude.json'].some((f) => fs.existsSync(path.join(home, f)));
 }
 
 try {

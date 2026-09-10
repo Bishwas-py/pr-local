@@ -9,6 +9,7 @@ export type Config = {
   default_branch: string;
   ticket?: string;
   ready_timeout: number;
+  agent?: boolean;
   repos: Record<string, string>;
   services: Services;
 };
@@ -84,6 +85,7 @@ export function loadConfig(file?: string): Config {
     default_branch: raw.default_branch ?? 'main',
     ticket: raw.ticket,
     ready_timeout: Number(raw.ready_timeout ?? 180),
+    agent: raw.agent === false ? false : undefined,
     repos,
     services
   };

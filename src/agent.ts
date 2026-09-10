@@ -53,6 +53,29 @@ A fix that changes no file (a database repaired, a container restarted) is still
 A machine-local env var VALUE the service needs (not a secret) goes into .pr-local.env in the working directory as NAME=value, committed as "local: ..."; pr-local reads it last when starting the service.
 When you cannot fix it, say exactly what you tried and stop.`;
 
+/** Read-only: explain the failure loudly, change nothing. Used by --no-fix. */
+export function diagnosePrompt(f: Failure, ctx: AgentContext): string {
+  const body = [
+    `pr-local is bringing up a PR locally and the "${f.service}" service failed at the ${f.step} step. Explain WHY, in full, but change NOTHING: no edits, no writes, no commits, no restarts. Read and inspect only.`,
+    f.command ? `Command: ${f.command}` : '',
+    `Failure: ${f.message}`,
+    `Working directory: ${ctx.cwd}`,
+    ``,
+    `Last lines of output:`,
+    '```',
+    f.logTail,
+    '```',
+    ``,
+    `Report, in plain lines a developer can act on:`,
+    `  - the root cause, traced to the exact file/line/statement`,
+    `  - whether it is the PR's problem (belongs upstream) or this machine's`,
+    `  - the smallest fix, described, not applied`,
+    `Do not edit or run anything that changes state. Environment variable names set: ${ctx.envNames.set.join(', ') || '(none)'}.`,
+    `Never read .env files or the secret store. Never print a secret value.`
+  ].join('\n');
+  return redact(body, ctx.secrets);
+}
+
 export function autosolvePrompt(f: Failure, ctx: AgentContext): string {
   const body = [
     `pr-local is bringing up a PR locally and the "${f.service}" service failed at the ${f.step} step.`,
