@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { loadConfig, type Config } from './config.ts';
+import { loadConfig, findConfig, sampleConfig, CONFIG_NAMES, type Config } from './config.ts';
 import { requiredServices, routeFor, parseTarget, pickBranch, slotFor, withPorts, type Target } from './plan.ts';
 import { git, gitOk, openPrs, formatPrList, prBranch, remoteBranches, prepareWorktree, worktreePath, changedFiles, diffText, autosolveChanges, formatAutosolveSummary, type Checkout, type Change } from './git.ts';
 import { SecretStore, readEnvFiles, parseEnvFile, isSecretName, promptSecret, unsetVars, type Secrets } from './secrets.ts';
@@ -18,6 +18,7 @@ const USAGE = `usage: deploy-dev [<pr|ticket|branch> ...] [options]
   deploy-dev PROJ-601                 a ticket id, when the config says what one looks like
   deploy-dev user/some-branch        a branch name
   deploy-dev --pr-list               open PRs in every repo of the stack
+  deploy-dev init                    write a starter deploy-dev.yaml here
 
 Everything else is automatic: a boot failure is fixed and retried, the data
 the change needs is seeded, the screen is checked against the running stack,
@@ -75,6 +76,7 @@ function main() {
     process.stdout.write(USAGE);
     return;
   }
+  if (positionals[0] === 'init') return initConfig();
   const cfg = loadConfig(values.config);
   if (values['pr-list']) {
     process.stdout.write(formatPrList(Object.fromEntries(Object.entries(cfg.repos).map(([n, d]) => [n, openPrs(d)]))) + '\n');
@@ -407,6 +409,14 @@ async function withFix<T>(where: Omit<Failure, 'message' | 'logTail'>, fn: () =>
       }
     }
   }
+}
+
+function initConfig() {
+  const target = path.join(process.cwd(), CONFIG_NAMES[0]);
+  const here = findConfig();
+  if (here) return die(`a config already applies here: ${here}. Edit it, or run deploy-dev from a repo it does not cover.`);
+  fs.writeFileSync(target, sampleConfig());
+  process.stderr.write(`wrote ${target}\nEdit the repos and the start/ready lines for your stack, then run deploy-dev --pr <n>.\n`);
 }
 
 try {

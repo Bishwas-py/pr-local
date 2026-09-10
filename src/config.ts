@@ -68,7 +68,7 @@ function expand(p: string, root: string): string {
 
 export function loadConfig(file?: string): Config {
   const f = file ?? findConfig();
-  if (!f) throw new Error(`no ${CONFIG_NAMES[0]} found from ${process.cwd()} upward, nor in a sibling directory below ${os.homedir()} that names this repo; pass --config`);
+  if (!f) throw new Error(`no ${CONFIG_NAMES[0]} found from ${process.cwd()} upward, nor in a sibling directory below ${os.homedir()} that names this repo. Run "deploy-dev init" to scaffold one, or pass --config.`);
   const raw = YAML.parse(fs.readFileSync(f, 'utf8')) ?? {};
   const root = path.dirname(path.resolve(f));
   const repos: Record<string, string> = {};
@@ -87,4 +87,65 @@ export function loadConfig(file?: string): Config {
     repos,
     services
   };
+}
+
+
+/** A commented starter config, written by `deploy-dev init`. Every value is an
+ *  example to replace; nothing here is required verbatim. */
+export function sampleConfig(): string {
+  return `# deploy-dev config. Data, not code: this describes YOUR stack so the tool
+# can run any PR locally. Paths are relative to this file. Delete what you
+# do not have; add services the same way.
+#
+# Run:  deploy-dev --pr 12        (or a branch name, or a ticket id)
+
+default_branch: main
+# A bare ticket id like ABC-123 becomes a branch search. Drop this line if you
+# do not name branches after tickets.
+ticket: abc-{id}
+
+# name: path-to-that-repo-checkout on this machine
+repos:
+  api: .
+  web: ../web-frontend
+
+services:
+  # Something already running (a database). No repo, no start: just a probe.
+  db:
+    ready: tcp://localhost:5432
+
+  api:
+    repo: api
+    needs: [db]
+    # dotenv files read from your normal checkout and injected into the process
+    env_files: [.env]
+    # base port; each PR gets its own stable offset, and \${port} fills in below
+    port: 8080
+    env:
+      PORT: "\${port}"
+    # a required var with no default is asked once and remembered, never logged
+    # ask: [SOME_API_KEY]
+    # one-shot before start (migrations), then the long-running command
+    # setup: ./migrate.sh
+    start: <how this service starts, e.g. go run . or npm start>
+    ready: http://localhost:\${port}/health
+    # free-text hint used when seeding data the PR needs to be seen
+    # seed: "Postgres at $DATABASE_URL; ./seed.sql refills the tables the UI reads."
+
+  web:
+    repo: web
+    needs: [api]
+    env_files: [.env, .env.local]
+    port: 5173
+    env:
+      API_URL: "http://localhost:\${api.port}"
+    # symlinked from your checkout into the scratch worktree so install is skipped
+    link: [node_modules]
+    start: <how this frontend starts, e.g. npm run dev -- --port \${port}>
+    ready: http://localhost:\${port}/
+    # where a human opens it; makes this service the screen deploy-dev opens
+    url: http://localhost:\${port}
+    # directory of file-based routes, so the screen matches the diff
+    routes: src/routes
+`;
 }

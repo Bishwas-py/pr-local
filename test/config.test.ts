@@ -88,3 +88,15 @@ test('the walk stops at $HOME and never scans above it', () => {
   writeFileSync(join(s.api, 'deploy-dev.yaml'), 'repos:\n  api: .\nservices: {}\n');
   assert.equal(findConfig(s.web, s.home), undefined);
 });
+
+import { sampleConfig } from '../src/config.ts';
+
+test('the scaffolded sample is valid, loadable config', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dd-sample-'));
+  const f = join(dir, 'deploy-dev.yaml');
+  writeFileSync(f, sampleConfig());
+  const cfg = loadConfig(f);
+  assert.ok(Object.keys(cfg.services).length >= 2, 'has services');
+  assert.equal(cfg.default_branch, 'main');
+  assert.ok(Object.values(cfg.services).some((s) => s.url), 'has an openable service');
+});
