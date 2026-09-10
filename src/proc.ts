@@ -4,7 +4,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 
-export const logRoot = () => path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'deploy-dev', 'logs');
+export const logRoot = () => path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'pr-local', 'logs');
 
 /** One log file per service, under a per-stack subdir so two stacks that both
  *  have a service called "db" never write to the same file. */

@@ -55,7 +55,7 @@ export function readEnvFiles(dir: string, files: string[] = []): Record<string, 
 }
 
 export const defaultStorePath = () =>
-  path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'deploy-dev', 'secrets.json');
+  path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'pr-local', 'secrets.json');
 
 /** Asked once, kept forever, 0600, outside every repo. */
 export class SecretStore {

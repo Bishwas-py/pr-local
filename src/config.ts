@@ -13,7 +13,7 @@ export type Config = {
   services: Services;
 };
 
-export const CONFIG_NAMES = ['deploy-dev.yaml', 'deploy-dev.yml'];
+export const CONFIG_NAMES = ['pr-local.yaml', 'pr-local.yml'];
 
 function configIn(dir: string): string | undefined {
   return CONFIG_NAMES.map((n) => path.join(dir, n)).find((f) => fs.existsSync(f));
@@ -68,7 +68,7 @@ function expand(p: string, root: string): string {
 
 export function loadConfig(file?: string): Config {
   const f = file ?? findConfig();
-  if (!f) throw new Error(`no ${CONFIG_NAMES[0]} found from ${process.cwd()} upward, nor in a sibling directory below ${os.homedir()} that names this repo. Run "deploy-dev init" to scaffold one, or pass --config.`);
+  if (!f) throw new Error(`no ${CONFIG_NAMES[0]} found from ${process.cwd()} upward, nor in a sibling directory below ${os.homedir()} that names this repo. Run "pr-local init" to scaffold one, or pass --config.`);
   const raw = YAML.parse(fs.readFileSync(f, 'utf8')) ?? {};
   const root = path.dirname(path.resolve(f));
   const repos: Record<string, string> = {};
@@ -90,14 +90,14 @@ export function loadConfig(file?: string): Config {
 }
 
 
-/** A commented starter config, written by `deploy-dev init`. Every value is an
+/** A commented starter config, written by `pr-local init`. Every value is an
  *  example to replace; nothing here is required verbatim. */
 export function sampleConfig(): string {
-  return `# deploy-dev config. Data, not code: this describes YOUR stack so the tool
+  return `# pr-local config. Data, not code: this describes YOUR stack so the tool
 # can run any PR locally. Paths are relative to this file. Delete what you
 # do not have; add services the same way.
 #
-# Run:  deploy-dev --pr 12        (or a branch name, or a ticket id)
+# Run:  pr-local --pr 12        (or a branch name, or a ticket id)
 
 default_branch: main
 # A bare ticket id like ABC-123 becomes a branch search. Drop this line if you
@@ -143,7 +143,7 @@ services:
     link: [node_modules]
     start: <how this frontend starts, e.g. npm run dev -- --port \${port}>
     ready: http://localhost:\${port}/
-    # where a human opens it; makes this service the screen deploy-dev opens
+    # where a human opens it; makes this service the screen pr-local opens
     url: http://localhost:\${port}
     # directory of file-based routes, so the screen matches the diff
     routes: src/routes

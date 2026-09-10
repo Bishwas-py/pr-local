@@ -11,14 +11,14 @@ import { start, runOnce, waitReady, stop, tail, logPath, type Running } from './
 import { runAgent, autosolvePrompt, checkPrompt, watchPrompt, parseReport, type Failure, type Report, type AgentContext } from './agent.ts';
 import { LogWatcher, errorSignature } from './watch.ts';
 
-const USAGE = `usage: deploy-dev [<pr|ticket|branch> ...] [options]
+const USAGE = `usage: pr-local [<pr|ticket|branch> ...] [options]
 
-  deploy-dev --pr 12                 run PR 12 instead of the default branch
-  deploy-dev --addpr 12 13           run PRs 12 and 13 merged together
-  deploy-dev PROJ-601                 a ticket id, when the config says what one looks like
-  deploy-dev user/some-branch        a branch name
-  deploy-dev --pr-list               open PRs in every repo of the stack
-  deploy-dev init                    write a starter deploy-dev.yaml here
+  pr-local --pr 12                 run PR 12 instead of the default branch
+  pr-local --addpr 12 13           run PRs 12 and 13 merged together
+  pr-local PROJ-601                 a ticket id, when the config says what one looks like
+  pr-local user/some-branch        a branch name
+  pr-local --pr-list               open PRs in every repo of the stack
+  pr-local init                    write a starter pr-local.yaml here
 
 Everything else is automatic: a boot failure is fixed and retried, the data
 the change needs is seeded, the screen is checked against the running stack,
@@ -29,7 +29,7 @@ machine only), and summarised at the end.
 options
   --open <path>       open this path instead of the one inferred from the diff
   --services a,b      boot exactly these instead of inferring from the diff
-  --config <file>     deploy-dev.yaml to use (default: nearest one that names this repo)
+  --config <file>     pr-local.yaml to use (default: nearest one that names this repo)
   --model <name>      agent model (default claude-opus-5)
   --no-agent          no model calls at all: stop at errors, seed nothing, watch nothing
   --no-open           do not open a browser
@@ -44,7 +44,7 @@ const elapsed = () => {
 const say = (line: string) => process.stderr.write(`[${elapsed().padStart(6)}] ${line}\n`);
 let cleanup: () => void = () => {};
 const die = (msg: string): never => {
-  process.stderr.write(`deploy-dev: ${msg}\n`);
+  process.stderr.write(`pr-local: ${msg}\n`);
   cleanup();
   process.exit(1);
 };
@@ -122,7 +122,7 @@ const pick = (env: Record<string, string>, names: string[] = []) => Object.fromE
 const emptySecrets = (): Secrets => ({ names: [], values: [] });
 
 /** Machine-local overrides the agents may add, committed on the scratch branch. */
-const LOCAL_ENV = '.deploy-dev.env';
+const LOCAL_ENV = '.pr-local.env';
 function localEnv(dir: string | undefined): Record<string, string> {
   const f = dir && path.join(dir, LOCAL_ENV);
   return f && fs.existsSync(f) ? parseEnvFile(fs.readFileSync(f, 'utf8')) : {};
@@ -132,13 +132,13 @@ async function run(cfg: Config, targets: Target[], opts: Opts) {
   const stackId = createHash('sha1').update(cfg.file).digest('hex').slice(0, 8);
   for (const [name, dir] of Object.entries(cfg.repos)) {
     if (!fs.existsSync(dir) || !gitOk(dir, 'rev-parse', '--git-dir')) die(`repo "${name}" in ${cfg.file} points at ${dir}, which is not a git repository`);
-    if (!gitOk(dir, 'remote', 'get-url', 'origin')) die(`repo "${name}" at ${dir} has no "origin" remote; deploy-dev fetches PR branches from origin`);
+    if (!gitOk(dir, 'remote', 'get-url', 'origin')) die(`repo "${name}" at ${dir} has no "origin" remote; pr-local fetches PR branches from origin`);
   }
   const branches = targets.map((t) => branchFor(cfg, t));
   if (branches.length) say(`branch${branches.length > 1 ? 'es' : ''}: ${branches.join(' + ')}`);
   for (const b of branches) {
     if (!Object.values(cfg.repos).some((dir) => remoteBranches(dir, b).length > 0)) {
-      die(`branch ${b} no longer exists on any remote; the PR was probably merged or closed. Try deploy-dev --pr-list for what is open.`);
+      die(`branch ${b} no longer exists on any remote; the PR was probably merged or closed. Try pr-local --pr-list for what is open.`);
     }
   }
   const slot = slotFor(branches.length ? branches : [cfg.default_branch]);
@@ -414,9 +414,9 @@ async function withFix<T>(where: Omit<Failure, 'message' | 'logTail'>, fn: () =>
 function initConfig() {
   const target = path.join(process.cwd(), CONFIG_NAMES[0]);
   const here = findConfig();
-  if (here) return die(`a config already applies here: ${here}. Edit it, or run deploy-dev from a repo it does not cover.`);
+  if (here) return die(`a config already applies here: ${here}. Edit it, or run pr-local from a repo it does not cover.`);
   fs.writeFileSync(target, sampleConfig());
-  process.stderr.write(`wrote ${target}\nEdit the repos and the start/ready lines for your stack, then run deploy-dev --pr <n>.\n`);
+  process.stderr.write(`wrote ${target}\nEdit the repos and the start/ready lines for your stack, then run pr-local --pr <n>.\n`);
 }
 
 try {

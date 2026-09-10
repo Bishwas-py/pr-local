@@ -13,7 +13,7 @@ export function gitOk(cwd: string, ...args: string[]): boolean {
 }
 
 export const worktreeRoot = () =>
-  path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'deploy-dev', 'worktrees');
+  path.join(process.env.XDG_CACHE_HOME || path.join(os.homedir(), '.cache'), 'pr-local', 'worktrees');
 
 /** A worktree dir unique to this repo: name for humans, a hash of the repo's
  *  absolute path so two stacks with a same-named repo never collide. */
@@ -36,7 +36,7 @@ export function remoteBranches(repoDir: string, pattern: string): string[] {
 
 export type Checkout = { dir: string; branch: string; prHead: string; merged: string[] };
 
-/** A scratch worktree on branch deploy-dev/<first>, with the rest merged in.
+/** A scratch worktree on branch pr-local/<first>, with the rest merged in.
  *  Second run on the same repo is a fetch and a reset, not a clone. */
 export function prepareWorktree(name: string, repoDir: string, branches: string[], links: string[] = []): Checkout {
   const dir = worktreePath(name, repoDir);
@@ -49,7 +49,7 @@ export function prepareWorktree(name: string, repoDir: string, branches: string[
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
     git(repoDir, 'worktree', 'add', '--quiet', '--force', '--detach', dir, `origin/${branches[0]}`);
   }
-  const scratch = `deploy-dev/${branches[0]}`;
+  const scratch = `pr-local/${branches[0]}`;
   const head = `origin/${branches[0]}`;
   if (gitOk(dir, 'rev-parse', '--verify', '--quiet', scratch) && gitOk(dir, 'merge-base', '--is-ancestor', head, scratch)) {
     git(dir, 'checkout', '--quiet', scratch);

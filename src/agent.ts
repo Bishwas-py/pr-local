@@ -19,7 +19,7 @@ export type AgentContext = {
   extraEnv?: Record<string, string>;
 };
 
-const FORBIDDEN = [/(^|[\/\s'"`])\.env(\.[\w-]+)?($|[\s'"`*])/, /deploy-dev\/secrets\.json/, /(^|[\s;&|(])env(\s|$)/, /printenv/];
+const FORBIDDEN = [/(^|[\/\s'"`])\.env(\.[\w-]+)?($|[\s'"`*])/, /\/secrets\.json/, /(^|[\s;&|(])env(\s|$)/, /printenv/];
 
 /** The agent never sees a secret: no env files, no store, no dumping the environment. */
 export function guardToolUse(toolName: string, input: Record<string, unknown>): { allow: boolean; reason?: string } {
@@ -47,18 +47,18 @@ Prefix the subject with exactly one of:
   fix:    the PR itself is broken and this belongs in the author's next commit
   local:  this machine's problem (a missing local var, a stale artefact, a local db state); it must never leave this machine
 Put the error you were solving in the subject, e.g. "fix: migration 20260909 conflicted with the base branch".
-Never commit env files. Never write a secret value anywhere. Never read .env files or ~/.config/deploy-dev.
+Never commit env files. Never write a secret value anywhere. Never read .env files or ~/.config/pr-local.
 If a variable is unset, the correct fix is usually "local:" and you may only note the NAME.
 A fix that changes no file (a database repaired, a container restarted) is still recorded: git commit --allow-empty with the same subject rules.
-A machine-local env var VALUE the service needs (not a secret) goes into .deploy-dev.env in the working directory as NAME=value, committed as "local: ..."; deploy-dev reads it last when starting the service.
+A machine-local env var VALUE the service needs (not a secret) goes into .pr-local.env in the working directory as NAME=value, committed as "local: ..."; pr-local reads it last when starting the service.
 When you cannot fix it, say exactly what you tried and stop.`;
 
 export function autosolvePrompt(f: Failure, ctx: AgentContext): string {
   const body = [
-    `deploy-dev is bringing up a PR locally and the "${f.service}" service failed at the ${f.step} step.`,
+    `pr-local is bringing up a PR locally and the "${f.service}" service failed at the ${f.step} step.`,
     f.command ? `Command: ${f.command}` : '',
     `Failure: ${f.message}`,
-    `Working directory (a scratch git worktree on branch deploy-dev/*): ${ctx.cwd}`,
+    `Working directory (a scratch git worktree on branch pr-local/*): ${ctx.cwd}`,
     ``,
     `Environment variable names that are set: ${ctx.envNames.set.join(', ') || '(none)'}`,
     ...ctx.envNames.unset.map((n) => `${n} is unset`),
@@ -68,7 +68,7 @@ export function autosolvePrompt(f: Failure, ctx: AgentContext): string {
     f.logTail,
     '```',
     ``,
-    `Fix only what blocks this step so deploy-dev can retry it. Do not improve, tidy or fix anything else you notice, and do not start long-running services yourself.`,
+    `Fix only what blocks this step so pr-local can retry it. Do not improve, tidy or fix anything else you notice, and do not start long-running services yourself.`,
     COMMIT_RULES
   ].join('\n');
   return redact(body, ctx.secrets);
@@ -164,8 +164,8 @@ const REPORT_RULES = `End your answer with exactly one json block:
 \`\`\`json
 {"data":"filled"|"none","issues":[{"found":"<what was wrong, one line>","fixed":true|false,"kind":"fix"|"local"}],"restart":["<service>"]}
 \`\`\`
-"restart" lists services whose process must be restarted for your change to apply (a code change, or a new line in .deploy-dev.env). deploy-dev restarts them; never start or stop a service yourself.
-A machine-local setting a service needs (an env var value for this machine only) goes into the file .deploy-dev.env in the working directory as NAME=value, committed as "local: ...". deploy-dev reads that file last when starting the service. Never put a secret value in it; a secret is asked from the user by deploy-dev, so say "<NAME> is unset" in the report instead.`;
+"restart" lists services whose process must be restarted for your change to apply (a code change, or a new line in .pr-local.env). pr-local restarts them; never start or stop a service yourself.
+A machine-local setting a service needs (an env var value for this machine only) goes into the file .pr-local.env in the working directory as NAME=value, committed as "local: ...". pr-local reads that file last when starting the service. Never put a secret value in it; a secret is asked from the user by pr-local, so say "<NAME> is unset" in the report instead.`;
 
 export type CheckInput = {
   diff: string;
@@ -179,7 +179,7 @@ export type CheckInput = {
 /** One pass after boot: is data needed, and does the screen actually work. */
 export function checkPrompt(input: CheckInput, ctx: AgentContext): string {
   const body = [
-    `deploy-dev has a PR running locally so a human can review it. Two questions, answer both by acting, quickly:`,
+    `pr-local has a PR running locally so a human can review it. Two questions, answer both by acting, quickly:`,
     `1. DATA: what state must exist for this change to be visible? A page that surfaces failures needs failed rows, not healthy ones. If the change has no visible surface, nothing: report data "none". Otherwise write an idempotent, additive seed script into the working directory, run it, commit it as "local: seed <what and why>".`,
     `2. RUNTIME: does the screen work against this local stack? Fetch the screen and the API calls it makes, read the service logs below for 4xx/5xx/errors, and exercise the endpoints the diff touches. A boot that answers its health check can still fail every real request (a 401 on an endpoint that needs a token subject, a missing local setting, a stale generated client).`,
     `For every issue: fix it if it is this machine's problem (kind "local") or the PR's (kind "fix"), one commit each, prefixed "fix:" or "local:", the error in the subject. Do not improve anything else.`,
@@ -195,7 +195,7 @@ export function checkPrompt(input: CheckInput, ctx: AgentContext): string {
     `How to seed:`,
     ...input.hints.map((h) => `  ${h.service}: ${h.hint}`),
     `Environment variable names available to your shell: ${ctx.envNames.set.join(', ') || '(none)'}`,
-    `Never read .env files or ~/.config/deploy-dev. Never write a secret value anywhere.`,
+    `Never read .env files or ~/.config/pr-local. Never write a secret value anywhere.`,
     ``,
     ...Object.entries(input.logTails).flatMap(([s, t]) => [`Recent log of ${s}:`, '```', t, '```']),
     ``,
@@ -210,7 +210,7 @@ export function checkPrompt(input: CheckInput, ctx: AgentContext): string {
 
 export function watchPrompt(service: string, lines: string[], running: CheckInput['running'], ctx: AgentContext): string {
   const body = [
-    `deploy-dev is running a PR locally and a reviewer is clicking through it. The "${service}" service just logged errors while they did:`,
+    `pr-local is running a PR locally and a reviewer is clicking through it. The "${service}" service just logged errors while they did:`,
     '```',
     lines.join('\n'),
     '```',
@@ -219,7 +219,7 @@ export function watchPrompt(service: string, lines: string[], running: CheckInpu
     `Running services (use them, never start your own):`,
     ...running.map((r) => `  ${r.service}: ${r.url}  log: ${r.log}${r.worktree ? `  code: ${r.worktree}` : ''}`),
     `Environment variable names available to your shell: ${ctx.envNames.set.join(', ') || '(none)'}`,
-    `Never read .env files or ~/.config/deploy-dev. Never write a secret value anywhere.`,
+    `Never read .env files or ~/.config/pr-local. Never write a secret value anywhere.`,
     REPORT_RULES
   ].join('\n');
   return redact(body, ctx.secrets);

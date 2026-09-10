@@ -6,7 +6,7 @@ test('the agent may not read env files or the secret store', () => {
   assert.equal(guardToolUse('Read', { file_path: '/x/app/.env' }).allow, false);
   assert.equal(guardToolUse('Read', { file_path: '/x/app/.env.local' }).allow, false);
   assert.equal(guardToolUse('Bash', { command: 'cat ../sibling/.env' }).allow, false);
-  assert.equal(guardToolUse('Bash', { command: 'cat ~/.config/deploy-dev/secrets.json' }).allow, false);
+  assert.equal(guardToolUse('Bash', { command: 'cat ~/.config/pr-local/secrets.json' }).allow, false);
   assert.equal(guardToolUse('Bash', { command: 'env | grep KEY' }).allow, false);
   assert.equal(guardToolUse('Glob', { pattern: '**/.env*' }).allow, false);
 });

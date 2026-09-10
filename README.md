@@ -1,12 +1,12 @@
-# deploy-dev
+# pr-local
 
 Run an unmerged PR on your own machine, in minutes, before the merge.
 
 ```
-deploy-dev --pr 12
-deploy-dev --addpr 12 13
-deploy-dev PROJ-601
-deploy-dev --pr 12 --fillindata
+pr-local --pr 12
+pr-local --addpr 12 13
+pr-local PROJ-601
+pr-local --pr 12 --fillindata
 ```
 
 Checks the PR out, brings up the smallest running stack that makes it visible,
@@ -93,8 +93,8 @@ back to the service `url`.
 ## Generic core, one config file
 
 The tool contains no project name, service name or repo path. Everything
-project-shaped is data in a `deploy-dev.yaml` in **your** repo, or `--config`.
-Run `deploy-dev init` once to drop a commented starter file, edit the repos
+project-shaped is data in a `pr-local.yaml` in **your** repo, or `--config`.
+Run `pr-local init` once to drop a commented starter file, edit the repos
 and the start/ready lines, and you are done.
 It is found from any repo in the stack: first upward from the current
 directory, then one level sideways at each step up to `$HOME`, taking the
@@ -174,15 +174,15 @@ base plus slot times 100. `${port}` and `${api.port}` in that service's
 lands on the same ports, PR 12 plus 13 on another set, and none of them on
 your own dev server's. Services without `port:` (a database) are untouched.
 
-Services run from scratch git worktrees under `~/.cache/deploy-dev/worktrees/`,
-on a branch named `deploy-dev/<branch>`, so your own checkout, its branch and
+Services run from scratch git worktrees under `~/.cache/pr-local/worktrees/`,
+on a branch named `pr-local/<branch>`, so your own checkout, its branch and
 its uncommitted work are never touched. Env files are not copied into the
 worktree; their values are injected into the service process instead.
 
 ## Secrets: ask once, never again
 
 Whenever a required var is missing it is asked for at most once and then kept
-in `~/.config/deploy-dev/secrets.json`, mode 0600, outside every repo. Two
+in `~/.config/pr-local/secrets.json`, mode 0600, outside every repo. Two
 paths lead there:
 
 - **declared up front** in `ask:`, so a run asks in one round before booting
@@ -242,7 +242,7 @@ PR and is wrong sometimes, so the wrong direction is chosen to be cheap: one
 service too many, a screen one click away. `--services` and `--open` are the
 escape hatch when a human sees it went wrong, and the PR body is not parsed.
 
-**TypeScript on Node.** The Agent SDK is first-class there, `npx deploy-dev`
+**TypeScript on Node.** The Agent SDK is first-class there, `npx pr-local`
 is how an open-source dev tool is handed to someone, and Node 22.18+ runs the
 sources without a build step. Tests use `node:test`. The single runtime
 dependency beyond the SDK is `yaml`, because the config is the one file a

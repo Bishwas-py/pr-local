@@ -8,7 +8,7 @@ import { loadConfig } from '../src/config.ts';
 function write(yaml: string): string {
   const dir = mkdtempSync(join(tmpdir(), 'dd-cfg-'));
   mkdirSync(join(dir, 'backend'));
-  const f = join(dir, 'deploy-dev.yaml');
+  const f = join(dir, 'pr-local.yaml');
   writeFileSync(f, yaml);
   return f;
 }
@@ -44,7 +44,7 @@ import { findConfig } from '../src/config.ts';
 function stack(extra: Record<string, string> = {}): { home: string; api: string; web: string; other: string } {
   const home = mkdtempSync(join(tmpdir(), 'dd-home-'));
   for (const d of ['api', 'web', 'other', 'node_modules/pkg', '.hidden']) mkdirSync(join(home, 'Projects', d), { recursive: true });
-  writeFileSync(join(home, 'Projects/api/deploy-dev.yaml'), 'repos:\n  api: .\n  web: ../web\nservices: {}\n');
+  writeFileSync(join(home, 'Projects/api/pr-local.yaml'), 'repos:\n  api: .\n  web: ../web\nservices: {}\n');
   for (const [rel, body] of Object.entries(extra)) {
     mkdirSync(join(home, rel, '..'), { recursive: true });
     writeFileSync(join(home, rel), body);
@@ -54,14 +54,14 @@ function stack(extra: Record<string, string> = {}): { home: string; api: string;
 
 test('from the repo holding the config: found', () => {
   const s = stack();
-  assert.equal(findConfig(s.api, s.home), join(s.api, 'deploy-dev.yaml'));
+  assert.equal(findConfig(s.api, s.home), join(s.api, 'pr-local.yaml'));
 });
 
 test('from a sibling repo the config names: found', () => {
   const s = stack();
-  assert.equal(findConfig(s.web, s.home), join(s.api, 'deploy-dev.yaml'));
+  assert.equal(findConfig(s.web, s.home), join(s.api, 'pr-local.yaml'));
   mkdirSync(join(s.web, 'src/routes'), { recursive: true });
-  assert.equal(findConfig(join(s.web, 'src/routes'), s.home), join(s.api, 'deploy-dev.yaml'), 'from a subdirectory too');
+  assert.equal(findConfig(join(s.web, 'src/routes'), s.home), join(s.api, 'pr-local.yaml'), 'from a subdirectory too');
 });
 
 test('from a sibling repo the config does not name: still nothing', () => {
@@ -70,13 +70,13 @@ test('from a sibling repo the config does not name: still nothing', () => {
 });
 
 test('a config in your own repo beats a sibling that also claims you', () => {
-  const s = stack({ 'Projects/web/deploy-dev.yaml': 'repos:\n  web: .\nservices: {}\n' });
-  assert.equal(findConfig(s.web, s.home), join(s.web, 'deploy-dev.yaml'));
+  const s = stack({ 'Projects/web/pr-local.yaml': 'repos:\n  web: .\nservices: {}\n' });
+  assert.equal(findConfig(s.web, s.home), join(s.web, 'pr-local.yaml'));
 });
 
 test('two configs claiming the same directory: error naming both', () => {
-  const s = stack({ 'Projects/other/deploy-dev.yml': 'repos:\n  web: ../web\nservices: {}\n' });
-  assert.throws(() => findConfig(s.web, s.home), (e: Error) => e.message.includes('Projects/api/deploy-dev.yaml') && e.message.includes('Projects/other/deploy-dev.yml'));
+  const s = stack({ 'Projects/other/pr-local.yml': 'repos:\n  web: ../web\nservices: {}\n' });
+  assert.throws(() => findConfig(s.web, s.home), (e: Error) => e.message.includes('Projects/api/pr-local.yaml') && e.message.includes('Projects/other/pr-local.yml'));
 });
 
 test('the walk stops at $HOME and never scans above it', () => {
@@ -84,8 +84,8 @@ test('the walk stops at $HOME and never scans above it', () => {
   // A config above $HOME that claims web must not be found.
   const above = join(s.home, '..', `dd-above-${Date.now()}`);
   mkdirSync(above, { recursive: true });
-  writeFileSync(join(above, 'deploy-dev.yaml'), `repos:\n  web: ${s.web}\nservices: {}\n`);
-  writeFileSync(join(s.api, 'deploy-dev.yaml'), 'repos:\n  api: .\nservices: {}\n');
+  writeFileSync(join(above, 'pr-local.yaml'), `repos:\n  web: ${s.web}\nservices: {}\n`);
+  writeFileSync(join(s.api, 'pr-local.yaml'), 'repos:\n  api: .\nservices: {}\n');
   assert.equal(findConfig(s.web, s.home), undefined);
 });
 
@@ -93,7 +93,7 @@ import { sampleConfig } from '../src/config.ts';
 
 test('the scaffolded sample is valid, loadable config', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dd-sample-'));
-  const f = join(dir, 'deploy-dev.yaml');
+  const f = join(dir, 'pr-local.yaml');
   writeFileSync(f, sampleConfig());
   const cfg = loadConfig(f);
   assert.ok(Object.keys(cfg.services).length >= 2, 'has services');
