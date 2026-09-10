@@ -69,7 +69,7 @@ function expand(p: string, root: string): string {
 
 export function loadConfig(file?: string): Config {
   const f = file ?? findConfig();
-  if (!f) throw new Error(`no ${CONFIG_NAMES[0]} found from ${process.cwd()} upward, nor in a sibling directory below ${os.homedir()} that names this repo. Run "pr-local init" to scaffold one, or pass --config.`);
+  if (!f) throw new Error(`no ${CONFIG_NAMES[0]} found from ${process.cwd()} upward, nor in a sibling directory below ${os.homedir()} that names this repo. Run pr-local in a repo to scaffold one, or pass --config.`);
   const raw = YAML.parse(fs.readFileSync(f, 'utf8')) ?? {};
   const root = path.dirname(path.resolve(f));
   const repos: Record<string, string> = {};
@@ -92,7 +92,7 @@ export function loadConfig(file?: string): Config {
 }
 
 
-/** A commented starter config, written by `pr-local init`. Every value is an
+/** A commented starter config, written on the first run in a new repo. Every value is an
  *  example to replace; nothing here is required verbatim. */
 export function sampleConfig(): string {
   return `# pr-local config. Data, not code: this describes YOUR stack so the tool
