@@ -1,0 +1,99 @@
+import path from 'node:path';
+
+export type Service = {
+  repo?: string;
+  paths?: string[];
+  needs?: string[];
+  env_files?: string[];
+  env?: Record<string, string>;
+  ask?: string[];
+  link?: string[];
+  setup?: string;
+  start?: string;
+  ready?: string;
+  url?: string;
+  routes?: string;
+  seed?: string;
+  agent_env?: string[];
+};
+export type Services = Record<string, Service>;
+
+function touched(svc: Service, files: string[]): boolean {
+  if (!svc.paths) return files.length > 0;
+  return files.some((f) => svc.paths!.some((p) => path.matchesGlob(f, p)));
+}
+
+function closure(services: Services, roots: Set<string>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const visit = (name: string) => {
+    if (seen.has(name)) return;
+    seen.add(name);
+    const svc = services[name];
+    if (!svc) throw new Error(`service "${name}" is needed but not defined`);
+    for (const n of svc.needs ?? []) visit(n);
+    out.push(name);
+  };
+  for (const name of Object.keys(services)) if (roots.has(name)) visit(name);
+  return out;
+}
+
+function dependsOn(services: Services, name: string, targets: Set<string>): boolean {
+  const stack = [...(services[name].needs ?? [])];
+  const seen = new Set<string>();
+  while (stack.length) {
+    const n = stack.pop()!;
+    if (targets.has(n)) return true;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    stack.push(...(services[n]?.needs ?? []));
+  }
+  return false;
+}
+
+/** Which services a diff needs on screen: the changed ones, every openable
+ *  service that shows them, and everything those need. Prefers one too many. */
+export function requiredServices(services: Services, changed: Record<string, string[]>): string[] {
+  const changedSvcs = new Set(
+    Object.entries(services)
+      .filter(([, s]) => s.repo && changed[s.repo] && touched(s, changed[s.repo]))
+      .map(([n]) => n)
+  );
+  const openable = Object.entries(services).filter(([, s]) => s.url).map(([n]) => n);
+  const roots = new Set(changedSvcs);
+  for (const n of openable) {
+    if (changedSvcs.size === 0 || dependsOn(services, n, changedSvcs)) roots.add(n);
+  }
+  return closure(services, roots);
+}
+
+/** The screen the diff changed, from file-based routes: drop (groups), skip
+ *  [params], pick the route the diff touched most. Falls back to the url. */
+export function routeFor(svc: Service, files: string[]): string | undefined {
+  if (!svc.url || !svc.routes) return svc.url;
+  const base = svc.url.replace(/\/$/, '');
+  const counts = new Map<string, number>();
+  for (const f of files) {
+    const rel = path.relative(svc.routes, f);
+    if (rel.startsWith('..')) continue;
+    const segs = path.dirname(rel).split('/').filter((s) => s && s !== '.' && !s.startsWith('('));
+    if (segs.some((s) => s.includes('['))) continue;
+    const route = '/' + segs.join('/');
+    counts.set(route, (counts.get(route) ?? 0) + 1);
+  }
+  const best = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].length - b[0].length)[0];
+  return best ? base + (best[0] === '/' ? '' : best[0]) : svc.url;
+}
+
+export type Target = { pr: number } | { ticket: string } | { branch: string };
+
+/** A bare argument is a PR number, a ticket id (when the config says what one
+ *  looks like) or a branch name. */
+export function parseTarget(arg: string, ticketPattern: string | undefined): Target {
+  if (/^\d+$/.test(arg)) return { pr: Number(arg) };
+  if (ticketPattern) {
+    const m = /^([A-Za-z]+)-(\d+)$/.exec(arg);
+    if (m) return { ticket: ticketPattern.replace('{id}', m[2]).replace(/^[A-Za-z]+/, (p) => p.toLowerCase()) };
+  }
+  return { branch: arg };
+}

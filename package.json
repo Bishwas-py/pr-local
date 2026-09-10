@@ -1,0 +1,29 @@
+{
+  "name": "deploy-dev",
+  "version": "0.1.0",
+  "description": "Run an unmerged PR on your own machine: minimum stack, diff-scoped seed data, self-healing bring-up.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "deploy-dev": "bin/deploy-dev.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.267",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2"
+  }
+}
