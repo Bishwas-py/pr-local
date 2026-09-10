@@ -8,17 +8,20 @@ cd your-repo
 pr-local --pr 12
 ```
 
-It checks the PR out, boots the smallest stack that makes the change visible,
-puts the data the change needs in front of it, opens the screen it changed,
-and fixes a broken boot on its own. Locally. Nothing touches a shared
-environment.
+No config for most repos: it detects how yours starts, checks the PR out,
+boots the smallest stack that makes the change visible, seeds the data it
+needs, opens the screen it changed, and fixes a broken boot on its own.
+Locally. Nothing touches a shared environment.
 
-## First run
+## Zero config
 
-The first time you run it in a repo with no config, it writes a starter
-`pr-local.yaml` and stops. Open it, set your repos and each service's
-`start` and `ready` lines, then run `pr-local --pr 12`. That is the only setup,
-once per stack.
+Most repos need no setup. From inside one, `pr-local --pr 12` detects the app,
+reads how it starts (`package.json` dev script, `go run .`, Django), its port,
+its routes, and its `.env`, and just runs it.
+
+You only write a `pr-local.yaml` when detection can't see your stack: several
+repos that boot together, or a database and a queue. It is then an override,
+not an entry fee. See [The config](#the-config).
 
 ## Flags
 
@@ -38,8 +41,9 @@ Everyday use needs none. For the rare case:
 
 ## The config
 
-One file describes your stack. It is data, not a DSL: someone reading it sees
-their services, not a language to learn. Paths are relative to the file.
+Optional. Write one only when detection can't infer your stack (multiple repos,
+a database). It is data, not a DSL: you see your services, not a language to
+learn. Paths are relative to the file. Present, it fully replaces detection.
 
 ```yaml
 default_branch: main

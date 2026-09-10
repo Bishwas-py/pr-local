@@ -58,7 +58,7 @@ test('parseTarget tells a pr number, a ticket and a branch apart', () => {
   assert.deepEqual(parseTarget('298', 'proj-{id}'), { pr: 298 });
   assert.deepEqual(parseTarget('PROJ-601', 'proj-{id}'), { ticket: 'proj-601' });
   assert.deepEqual(parseTarget('user/proj-601-steps', 'proj-{id}'), { branch: 'user/proj-601-steps' });
-  assert.deepEqual(parseTarget('PROJ-601', undefined), { branch: 'PROJ-601' });
+  assert.deepEqual(parseTarget('PROJ-601', undefined), { ticket: 'proj-601' });  // ticket shape -> search, even with no pattern
 });
 
 import { pickBranch } from '../src/plan.ts';

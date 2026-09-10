@@ -92,9 +92,12 @@ export type Target = { pr: number } | { ticket: string } | { branch: string };
  *  looks like) or a branch name. */
 export function parseTarget(arg: string, ticketPattern: string | undefined): Target {
   if (/^\d+$/.test(arg)) return { pr: Number(arg) };
-  if (ticketPattern) {
-    const m = /^([A-Za-z]+)-(\d+)$/.exec(arg);
-    if (m) return { ticket: ticketPattern.replace('{id}', m[2]).replace(/^[A-Za-z]+/, (p) => p.toLowerCase()) };
+  const m = /^([A-Za-z]+)-(\d+)$/.exec(arg);
+  if (m) {
+    // With a pattern, shape the id (cla-{id}); without one, the arg itself is
+    // the search term. Either way a ticket becomes a *substring* branch search.
+    const id = ticketPattern ? ticketPattern.replace('{id}', m[2]) : arg;
+    return { ticket: id.toLowerCase() };
   }
   return { branch: arg };
 }

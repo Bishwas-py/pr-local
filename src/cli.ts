@@ -3,7 +3,8 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { loadConfig, findConfig, sampleConfig, CONFIG_NAMES, type Config } from './config.ts';
+import { loadConfig, findConfig, type Config } from './config.ts';
+import { detectStack } from './detect.ts';
 import { requiredServices, routeFor, parseTarget, pickBranch, slotFor, withPorts, type Target } from './plan.ts';
 import { git, gitOk, openPrs, formatPrList, prBranch, remoteBranches, prepareWorktree, worktreePath, changedFiles, diffText, autosolveChanges, formatAutosolveSummary, type Checkout, type Change } from './git.ts';
 import { SecretStore, readEnvFiles, parseEnvFile, isSecretName, promptSecret, unsetVars, type Secrets } from './secrets.ts';
@@ -72,8 +73,17 @@ function main() {
     return;
   }
   const found = values.config ?? findConfig();
-  if (!found) return autoInit();
-  const cfg = loadConfig(found);
+  let cfg: Config;
+  if (found) {
+    cfg = loadConfig(found);
+  } else {
+    cfg = detectStack(process.cwd());
+    const only = Object.values(cfg.services)[0];
+    if (!only?.start) {
+      return die(`couldn't detect how this repo starts. Drop a pr-local.yaml here with a "start:" line (everything else is inferred). See the README config section.`);
+    }
+    process.stderr.write(`no config: detected ${Object.keys(cfg.services)[0]} (${only.start}). A pr-local.yaml overrides this if it ever guesses wrong.\n`);
+  }
   if (values['pr-list']) {
     process.stdout.write(formatPrList(Object.fromEntries(Object.entries(cfg.repos).map(([n, d]) => [n, openPrs(d)]))) + '\n');
     return;
@@ -127,7 +137,7 @@ function localEnv(dir: string | undefined): Record<string, string> {
 }
 
 async function run(cfg: Config, targets: Target[], opts: Opts) {
-  const stackId = createHash('sha1').update(cfg.file).digest('hex').slice(0, 8);
+  const stackId = createHash('sha1').update(cfg.file + '|' + Object.values(cfg.repos).join('|')).digest('hex').slice(0, 8);
   for (const [name, dir] of Object.entries(cfg.repos)) {
     if (!fs.existsSync(dir) || !gitOk(dir, 'rev-parse', '--git-dir')) die(`repo "${name}" in ${cfg.file} points at ${dir}, which is not a git repository`);
     if (!gitOk(dir, 'remote', 'get-url', 'origin')) die(`repo "${name}" at ${dir} has no "origin" remote; pr-local fetches PR branches from origin`);
@@ -418,13 +428,6 @@ async function withFix<T>(where: Omit<Failure, 'message' | 'logTail'>, fn: () =>
   }
 }
 
-/** First run in a repo with no config: scaffold one and stop so it can be filled in. */
-function autoInit() {
-  const target = path.join(process.cwd(), CONFIG_NAMES[0]);
-  if (fs.existsSync(target)) return die(`${target} exists but does not cover this directory; edit it, or pass --config.`);
-  fs.writeFileSync(target, sampleConfig());
-  process.stderr.write(`No config yet, so I wrote ${CONFIG_NAMES[0]} here.\nOpen it, set your repos and the start/ready lines, then run pr-local --pr <n>.\n`);
-}
 
 /** The agent runs only when there is a way to reach it and the config allows it. */
 function agentAvailable(cfg: Config): boolean {

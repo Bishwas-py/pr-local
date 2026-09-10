@@ -92,7 +92,7 @@ export function loadConfig(file?: string): Config {
 }
 
 
-/** A commented starter config, written on the first run in a new repo. Every value is an
+/** A reference pr-local.yaml (for an override or a multi-repo stack). Every value is an
  *  example to replace; nothing here is required verbatim. */
 export function sampleConfig(): string {
   return `# pr-local config. Data, not code: this describes YOUR stack so the tool
