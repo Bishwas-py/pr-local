@@ -1,6 +1,6 @@
 {
   "name": "pr-local",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Run an unmerged PR on your own machine in minutes: minimum stack from the diff, diff-scoped seed data, self-healing bring-up. Local, pre-merge, never a shared environment.",
   "license": "MIT",
   "type": "module",

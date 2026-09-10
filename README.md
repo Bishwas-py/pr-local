@@ -20,6 +20,22 @@ The first time you run it in a repo with no config, it writes a starter
 `start` and `ready` lines, then run `pr-local --pr 12`. That is the only setup,
 once per stack.
 
+## Flags
+
+Everyday use needs none. For the rare case:
+
+| Flag | For |
+| -- | -- |
+| `--addpr 12 13` | several PRs merged together |
+| `--pr-list` | list open PRs to pick from |
+| `--no-seed` | boot and fix, but create no data |
+| `--no-fix` | diagnose loudly, change nothing |
+| `--services a,b` | boot exactly these |
+| `--open <path>` | open this instead of the inferred screen |
+| `--config <file>` | use this config |
+| `--model <name>` | agent model (default `claude-opus-5`) |
+| `--attempts <n>` | fix attempts per failing step (default 3) |
+
 ## The config
 
 One file describes your stack. It is data, not a DSL: someone reading it sees
@@ -102,22 +118,6 @@ The agent seeds data, fixes boots, and looks into errors. It runs only when it
 can reach a model: set `ANTHROPIC_API_KEY`, or be logged into Claude Code. With
 neither, pr-local still boots your stack and just reports errors instead of
 fixing them. To turn it off for good, add `agent: off` to the config.
-
-## Flags
-
-Everyday use needs none. For the rare case:
-
-| Flag | For |
-| -- | -- |
-| `--addpr 12 13` | several PRs merged together |
-| `--pr-list` | list open PRs to pick from |
-| `--no-seed` | boot and fix, but create no data |
-| `--no-fix` | diagnose loudly, change nothing |
-| `--services a,b` | boot exactly these |
-| `--open <path>` | open this instead of the inferred screen |
-| `--config <file>` | use this config |
-| `--model <name>` | agent model (default `claude-opus-5`) |
-| `--attempts <n>` | fix attempts per failing step (default 3) |
 
 ## Requirements
 
