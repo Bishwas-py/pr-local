@@ -292,4 +292,8 @@ async function fillInData(cfg: Config, required: string[], checkouts: Record<str
   say(`fillindata: ${r.text.split('\n')[0].slice(0, 200)} (${r.turns} turns, $${r.costUsd.toFixed(2)})`);
 }
 
-main()?.catch((e) => die(e.message));
+try {
+  await main();
+} catch (e: any) {
+  die(e.message);
+}
